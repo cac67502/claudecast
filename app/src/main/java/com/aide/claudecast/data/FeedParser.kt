@@ -171,7 +171,7 @@ class FeedParser {
                                         title = e.title,
                                         description = e.description,
                                         datePublished = parseDate(e.pubDate),
-                                        enclosureUrl = e.enclosureUrl,
+                                        enclosureUrl = cleanEnclosure(e.enclosureUrl),
                                         durationSec = parseDuration(e.durationRaw),
                                         artworkUrl = e.image ?: channelImage,
                                         podcastTitle = channelTitle,
@@ -228,6 +228,48 @@ class FeedParser {
             }
         }
         return 0L
+    }
+
+    /**
+     * Strip known tracking / redirect prefixes from an enclosure URL (podtrac,
+     * chartable, podsights, op3, etc.). This is a privacy measure — it removes the
+     * analytics hops. NOTE: it does NOT remove host-side Dynamic Ad Insertion ads
+     * (Megaphone/Art19/Omny/Acast), which are stitched into the audio at the origin
+     * and cannot be stripped client-side without breaking playback.
+     */
+    private val trackingPrefixes = listOf(
+        Regex("^https?://(www\\.)?dts\\.podtrac\\.com/(pts/)?redirect\\.[a-z0-9]+/", RegexOption.IGNORE_CASE),
+        Regex("^https?://(www\\.)?podtrac\\.com/pts/redirect\\.[a-z0-9]+/", RegexOption.IGNORE_CASE),
+        Regex("^https?://chrt\\.fm/track/[^/]+/", RegexOption.IGNORE_CASE),
+        Regex("^https?://chtbl\\.com/track/[^/]+/", RegexOption.IGNORE_CASE),
+        Regex("^https?://pdst\\.fm/e/", RegexOption.IGNORE_CASE),
+        Regex("^https?://mgln\\.ai/e/[^/]+/", RegexOption.IGNORE_CASE),
+        Regex("^https?://pscrb\\.fm/rss/p/", RegexOption.IGNORE_CASE),
+        Regex("^https?://verifi\\.podscribe\\.com/rss/p/", RegexOption.IGNORE_CASE),
+        Regex("^https?://op3\\.dev/e/", RegexOption.IGNORE_CASE),
+        Regex("^https?://claritaspod\\.com/measure/", RegexOption.IGNORE_CASE),
+        Regex("^https?://prefix\\.up\\.audio/s/", RegexOption.IGNORE_CASE),
+        Regex("^https?://arttrk\\.com/p/[^/]+/", RegexOption.IGNORE_CASE),
+        Regex("^https?://pdrl\\.fm/[^/]+/", RegexOption.IGNORE_CASE)
+    )
+
+    private fun cleanEnclosure(url: String): String {
+        var u = url.trim()
+        if (u.isEmpty()) return u
+        var changed = true
+        var guard = 0
+        while (changed && guard++ < 8) {
+            changed = false
+            for (p in trackingPrefixes) {
+                val m = p.find(u) ?: continue
+                u = u.substring(m.range.last + 1)
+                if (!u.startsWith("http", ignoreCase = true) && u.contains(".") && !u.startsWith("/")) {
+                    u = "https://$u"
+                }
+                changed = true
+            }
+        }
+        return u
     }
 
     private fun parseDuration(raw: String?): Long {

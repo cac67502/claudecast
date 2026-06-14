@@ -20,9 +20,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Forward30
 import androidx.compose.material.icons.rounded.Replay10
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -248,18 +251,65 @@ private fun NowPlayingTab(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-        // Speed control
-        val currentSpeed = state.speed
-        TextButton(onClick = {
-            val idx = speedSteps.indexOfFirst { kotlin.math.abs(it - currentSpeed) < 0.01f }
-            val next = speedSteps[(idx + 1).coerceAtLeast(0) % speedSteps.size]
-            vm.player.setSpeed(next)
-        }) {
-            Text(
-                "Speed  ${"%.1f".format(currentSpeed)}x",
-                color = MaterialTheme.colorScheme.primary
-            )
+        Spacer(Modifier.height(12.dp))
+        // Speed + Sleep timer
+        val sleepRemaining by vm.player.sleepRemainingMs.collectAsStateWithLifecycle()
+        val sleepEnd by vm.player.sleepEndOfEpisode.collectAsStateWithLifecycle()
+        var sleepMenu by remember { mutableStateOf(false) }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            val currentSpeed = state.speed
+            TextButton(onClick = {
+                val idx = speedSteps.indexOfFirst { kotlin.math.abs(it - currentSpeed) < 0.01f }
+                val next = speedSteps[(idx + 1).coerceAtLeast(0) % speedSteps.size]
+                vm.player.setSpeed(next)
+            }) {
+                Text("${"%.1f".format(currentSpeed)}x", color = MaterialTheme.colorScheme.primary)
+            }
+
+            Box {
+                val sleepLabel = when {
+                    sleepRemaining != null -> Format.clock(sleepRemaining!!)
+                    sleepEnd -> "End"
+                    else -> "Sleep"
+                }
+                val active = sleepRemaining != null || sleepEnd
+                TextButton(onClick = { sleepMenu = true }) {
+                    Icon(
+                        Icons.Rounded.Bedtime, contentDescription = "Sleep timer",
+                        modifier = Modifier.size(18.dp),
+                        tint = if (active) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        sleepLabel,
+                        color = if (active) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                DropdownMenu(expanded = sleepMenu, onDismissRequest = { sleepMenu = false }) {
+                    listOf(10, 15, 30, 45, 60).forEach { min ->
+                        DropdownMenuItem(
+                            text = { Text("$min minutes") },
+                            onClick = { vm.player.startSleepTimer(min); sleepMenu = false }
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("End of episode") },
+                        onClick = { vm.player.sleepAtEndOfEpisode(); sleepMenu = false }
+                    )
+                    if (active) {
+                        DropdownMenuItem(
+                            text = { Text("Turn off") },
+                            onClick = { vm.player.cancelSleepTimer(); sleepMenu = false }
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -12,6 +12,7 @@ import androidx.media3.session.SessionToken
 import com.aide.claudecast.data.Episode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,14 @@ class PlayerController(
     private var queue: List<Episode> = emptyList()
 
     private var defaultSpeed = 1.0f
+
+    // Sleep timer
+    private var sleepJob: Job? = null
+    private var sleepAtEpisodeEnd = false
+    private val _sleepRemainingMs = MutableStateFlow<Long?>(null)
+    val sleepRemainingMs: StateFlow<Long?> = _sleepRemainingMs.asStateFlow()
+    private val _sleepEndOfEpisode = MutableStateFlow(false)
+    val sleepEndOfEpisode: StateFlow<Boolean> = _sleepEndOfEpisode.asStateFlow()
 
     fun setDefaultSpeed(speed: Float) { defaultSpeed = speed }
 
@@ -110,6 +119,14 @@ class PlayerController(
                         ticks = 0
                         _currentEpisode.value?.let { onPersistPosition(it.id, pos) }
                     }
+                    // sleep timer: stop at the end of the current episode
+                    if (sleepAtEpisodeEnd) {
+                        val d = c.duration
+                        if (d > 0 && pos >= d - 800) {
+                            pauseInternal()
+                            cancelSleepTimer()
+                        }
+                    }
                 }
                 delay(500)
             }
@@ -167,4 +184,46 @@ class PlayerController(
     }
 
     fun setSpeed(speed: Float) { controller?.setPlaybackSpeed(speed) }
+
+    /* ---------- Sleep timer ---------- */
+
+    private fun pauseInternal() {
+        val c = controller ?: return
+        c.pause()
+        _currentEpisode.value?.let { ep -> scope.launch { onPersistPosition(ep.id, c.currentPosition) } }
+    }
+
+    fun startSleepTimer(minutes: Int) {
+        sleepJob?.cancel()
+        sleepAtEpisodeEnd = false
+        _sleepEndOfEpisode.value = false
+        sleepJob = scope.launch {
+            var remaining = minutes * 60_000L
+            _sleepRemainingMs.value = remaining
+            while (remaining > 0) {
+                delay(1000)
+                remaining -= 1000
+                _sleepRemainingMs.value = remaining.coerceAtLeast(0L)
+            }
+            pauseInternal()
+            _sleepRemainingMs.value = null
+            sleepJob = null
+        }
+    }
+
+    fun sleepAtEndOfEpisode() {
+        sleepJob?.cancel()
+        sleepJob = null
+        _sleepRemainingMs.value = null
+        sleepAtEpisodeEnd = true
+        _sleepEndOfEpisode.value = true
+    }
+
+    fun cancelSleepTimer() {
+        sleepJob?.cancel()
+        sleepJob = null
+        sleepAtEpisodeEnd = false
+        _sleepRemainingMs.value = null
+        _sleepEndOfEpisode.value = false
+    }
 }
