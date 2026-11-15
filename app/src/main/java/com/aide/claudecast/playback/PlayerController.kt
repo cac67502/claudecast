@@ -10,6 +10,8 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.aide.claudecast.data.Episode
+import com.aide.claudecast.data.Song
+import com.aide.claudecast.data.Station
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -20,7 +22,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+enum class MediaKind { None, Podcast, Music, Radio }
+
 data class PlayerUiState(
+    val kind: MediaKind = MediaKind.None,
+    val shuffle: Boolean = false,
+    val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val hasNext: Boolean = false,
+    val hasPrevious: Boolean = false,
     val hasMedia: Boolean = false,
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
@@ -51,6 +60,10 @@ class PlayerController(
     val currentEpisode: StateFlow<Episode?> = _currentEpisode.asStateFlow()
 
     private var queue: List<Episode> = emptyList()
+
+    private var kind = MediaKind.None
+    private val _currentStation = MutableStateFlow<Station?>(null)
+    val currentStation: StateFlow<Station?> = _currentStation.asStateFlow()
 
     private var defaultSpeed = 1.0f
 
@@ -88,16 +101,29 @@ class PlayerController(
 
     private fun syncFrom(player: Player) {
         val ep = _currentEpisode.value
+        val st = _currentStation.value
+        val metaTitle = player.mediaMetadata.title?.toString().orEmpty()
         _state.value = _state.value.copy(
+            kind = if (player.mediaItemCount > 0) kind else MediaKind.None,
+            shuffle = player.shuffleModeEnabled,
+            repeatMode = player.repeatMode,
+            hasNext = player.hasNextMediaItem(),
+            hasPrevious = player.hasPreviousMediaItem(),
             hasMedia = player.mediaItemCount > 0,
             isPlaying = player.isPlaying,
             isBuffering = player.playbackState == Player.STATE_BUFFERING,
             durationMs = player.duration.coerceAtLeast(0L),
             speed = player.playbackParameters.speed,
             episodeId = ep?.id ?: "",
-            title = player.mediaMetadata.title?.toString() ?: ep?.title.orEmpty(),
-            podcastTitle = player.mediaMetadata.artist?.toString() ?: ep?.podcastTitle.orEmpty(),
-            artworkUrl = ep?.artworkUrl
+            title = when {
+                st != null -> metaTitle.takeIf { it.isNotBlank() && !it.equals(st.name, true) } ?: st.name
+                else -> player.mediaMetadata.title?.toString() ?: ep?.title.orEmpty()
+            },
+            podcastTitle = when {
+                st != null -> st.name
+                else -> player.mediaMetadata.artist?.toString() ?: ep?.podcastTitle.orEmpty()
+            },
+            artworkUrl = ep?.artworkUrl ?: st?.favicon
         )
     }
 
@@ -145,6 +171,8 @@ class PlayerController(
         if (episodes.isEmpty()) return
         val idx = startIndex.coerceIn(0, episodes.lastIndex)
         queue = episodes
+        kind = MediaKind.Podcast
+        _currentStation.value = null
         _currentEpisode.value = episodes[idx]
         val items = episodes.map { ep ->
             MediaItem.Builder()
@@ -167,8 +195,89 @@ class PlayerController(
         syncFrom(c)
     }
 
+    /** Play songs from the phone's library as a playlist. */
+    fun playSongs(songs: List<Song>, startIndex: Int, shuffle: Boolean = false) {
+        val c = controller ?: return
+        if (songs.isEmpty()) return
+        val idx = startIndex.coerceIn(0, songs.lastIndex)
+        queue = emptyList()
+        kind = MediaKind.Music
+        _currentStation.value = null
+        _currentEpisode.value = null
+        val items = songs.map { s ->
+            MediaItem.Builder()
+                .setMediaId(s.uri)
+                .setUri(s.uri)
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(s.title)
+                        .setArtist(s.artist)
+                        .setAlbumTitle(s.album)
+                        .build()
+                )
+                .build()
+        }
+        c.shuffleModeEnabled = shuffle
+        c.setMediaItems(items, if (shuffle) (songs.indices).random() else idx, 0L)
+        c.prepare()
+        c.setPlaybackSpeed(1.0f)
+        c.playWhenReady = true
+        syncFrom(c)
+    }
+
+    /** Play a live radio station. */
+    fun playStation(station: Station) {
+        val c = controller ?: return
+        queue = emptyList()
+        kind = MediaKind.Radio
+        _currentEpisode.value = null
+        _currentStation.value = station
+        val item = MediaItem.Builder()
+            .setMediaId("radio:" + station.uuid)
+            .setUri(station.url)
+            .apply { if (station.hls) setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8) }
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(station.name)
+                    .setArtist(station.name)
+                    .setArtworkUri(station.favicon?.let { Uri.parse(it) })
+                    .build()
+            )
+            .build()
+        c.shuffleModeEnabled = false
+        c.repeatMode = Player.REPEAT_MODE_OFF
+        c.setMediaItem(item)
+        c.prepare()
+        c.setPlaybackSpeed(1.0f)
+        c.playWhenReady = true
+        syncFrom(c)
+    }
+
+    fun next() { controller?.let { if (it.hasNextMediaItem()) it.seekToNextMediaItem() } }
+
+    fun previous() {
+        val c = controller ?: return
+        if (c.currentPosition > 3000 || !c.hasPreviousMediaItem()) c.seekTo(0) else c.seekToPreviousMediaItem()
+    }
+
+    fun toggleShuffle() { controller?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled } }
+
+    fun cycleRepeat() {
+        val c = controller ?: return
+        c.repeatMode = when (c.repeatMode) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
+    }
+
     fun togglePlayPause() {
         val c = controller ?: return
+        if (!c.isPlaying && kind == MediaKind.Radio) {
+            // Rejoin the live broadcast instead of resuming a stale buffer.
+            _currentStation.value?.let { playStation(it) }
+            return
+        }
         if (c.isPlaying) {
             c.pause()
             _currentEpisode.value?.let { ep -> scope.launch { onPersistPosition(ep.id, c.currentPosition) } }

@@ -107,6 +107,12 @@ fun SettingsScreen(vm: SettingsViewModel = viewModel()) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(16.dp))
 
+            VolumeGuardSection()
+
+            Spacer(Modifier.height(24.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(Modifier.height(16.dp))
+
             Text("About", style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(6.dp))
@@ -119,7 +125,7 @@ fun SettingsScreen(vm: SettingsViewModel = viewModel()) {
 
             Spacer(Modifier.height(24.dp))
             Text(
-                "ClaudeCast v1.0  •  Podcasting 2.0",
+                "ClaudeCast v1.2  •  Podcasting 2.0",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

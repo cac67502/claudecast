@@ -13,12 +13,26 @@ android {
         applicationId = "com.aide.claudecast"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "1.2"
         vectorDrawables { useSupportLibrary = true }
     }
 
+    // Fixed key checked into the repo so every GitHub build installs over the last one
+    // (the default debug key changes on every build machine).
+    signingConfigs {
+        create("fixed") {
+            storeFile = file("claudecast.jks")
+            storePassword = "claudecast"
+            keyAlias = "claudecast"
+            keyPassword = "claudecast"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("fixed")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -72,6 +86,7 @@ dependencies {
     implementation("androidx.media3:media3-session:1.4.1")
     implementation("androidx.media3:media3-ui:1.4.1")
     implementation("androidx.media3:media3-common:1.4.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
 
     // Networking + JSON
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

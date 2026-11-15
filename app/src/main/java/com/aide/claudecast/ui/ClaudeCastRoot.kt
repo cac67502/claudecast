@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.LibraryBooks
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
@@ -27,14 +28,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.aide.claudecast.ServiceLocator
+import com.aide.claudecast.playback.MediaKind
 
 sealed class Dest(val route: String, val label: String, val icon: ImageVector) {
     data object Library : Dest("library", "Library", Icons.Rounded.LibraryBooks)
+    data object Music : Dest("music", "Music", Icons.Rounded.MusicNote)
     data object Search : Dest("search", "Search", Icons.Rounded.Search)
     data object Settings : Dest("settings", "Settings", Icons.Rounded.Settings)
 }
 
-private val bottomDests = listOf(Dest.Library, Dest.Search, Dest.Settings)
+private val bottomDests = listOf(Dest.Library, Dest.Music, Dest.Search, Dest.Settings)
 
 private fun encodeArg(s: String): String =
     Base64.encodeToString(s.toByteArray(), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
@@ -51,7 +54,7 @@ fun ClaudeCastRoot() {
 
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
-    val showBars = currentRoute in setOf(Dest.Library.route, Dest.Search.route, Dest.Settings.route)
+    val showBars = currentRoute in setOf(Dest.Library.route, Dest.Music.route, Dest.Search.route, Dest.Settings.route)
 
     val openPodcast: (String) -> Unit = { feedUrl -> nav.navigate("podcast/${encodeArg(feedUrl)}") }
 
@@ -112,6 +115,9 @@ fun ClaudeCastRoot() {
             composable(Dest.Search.route) {
                 SearchScreen(onOpenPodcast = openPodcast)
             }
+            composable(Dest.Music.route) {
+                MusicScreen(onOpenPlayer = { nav.navigate("player") })
+            }
             composable(Dest.Settings.route) { SettingsScreen() }
             composable("podcast/{feedArg}") { entry ->
                 val feedUrl = decodeArg(entry.arguments?.getString("feedArg").orEmpty())
@@ -122,7 +128,10 @@ fun ClaudeCastRoot() {
                 )
             }
             composable("player") {
-                PlayerScreen(onBack = { nav.popBackStack() })
+                if (playerState.kind == MediaKind.Music || playerState.kind == MediaKind.Radio)
+                    MusicPlayerScreen(onBack = { nav.popBackStack() })
+                else
+                    PlayerScreen(onBack = { nav.popBackStack() })
             }
         }
     }

@@ -25,6 +25,24 @@ email providers.)
   - **Value 4 Value** — `<podcast:value>` recipients and splits displayed (see note).
   - Soundbites, season/episode, funding links.
 
+## Music (v1.2)
+
+- **Radio:** search ~50k free stations by name or genre via Radio Browser (no account,
+  no key). Favorites, now-playing song info, and a heart button that saves the song
+  to a **Heard** list.
+- **Record this song:** tape-deck style. While a station plays, the app keeps the
+  current song in memory; pressing Record saves that one song (MP3 or AAC) to
+  `Music/ClaudeCast/<station>/` when the station's song info changes. One song per
+  press, for personal listening. Toggle "Song recording" off to save data.
+- **Library:** everything on the phone plus recordings, browsed by Songs, Artists,
+  Albums and Playlists, with shuffle and repeat. Nothing leaves the device.
+
+## Volume Guard (v1.1)
+
+Settings ▸ Volume Guard. Taps Undo on Android's "Volume lowered to safer level" alert
+and restores the previous media volume. Needs notification access (on sideloaded
+installs: App info ▸ ⋮ ▸ Allow restricted settings first).
+
 ## Setup
 
 1. **Open in Android Studio** (Hedgehog or newer). `File ▸ Open ▸` the `ClaudeCast`
