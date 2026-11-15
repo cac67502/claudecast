@@ -262,7 +262,8 @@ private fun StationRow(st: Station, isFavorite: Boolean, onClick: () -> Unit, on
         Column(Modifier.weight(1f)) {
             Text(st.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
             val sub = listOfNotNull(
-                st.tags.split(',').take(3).joinToString(", ").ifBlank { null },
+                if (st.plays > 0) "${compactCount(st.plays)} plays today" else null,
+                st.tags.split(',').take(2).joinToString(", ").ifBlank { null },
                 st.country.ifBlank { null },
                 if (st.bitrate > 0) "${st.bitrate}k" else null
             ).joinToString(" • ")
@@ -279,6 +280,12 @@ private fun StationRow(st: Station, isFavorite: Boolean, onClick: () -> Unit, on
             )
         }
     }
+}
+
+private fun compactCount(n: Int): String = when {
+    n >= 1_000_000 -> String.format(Locale.US, "%.1fM", n / 1_000_000.0)
+    n >= 1_000 -> String.format(Locale.US, "%.1fk", n / 1_000.0)
+    else -> n.toString()
 }
 
 @Composable

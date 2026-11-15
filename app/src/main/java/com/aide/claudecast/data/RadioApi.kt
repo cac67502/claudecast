@@ -34,7 +34,7 @@ class RadioApi(
     )
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** Search by station name and/or tag (genre). Most-popular first. */
+    /** English-language stations by name and/or genre, most listened to (last 24h) first. */
     suspend fun search(name: String = "", tag: String = "", limit: Int = 60): List<Station> =
         withContext(Dispatchers.IO) {
             var lastError: Exception? = null
@@ -44,6 +44,7 @@ class RadioApi(
                         .apply {
                             if (name.isNotBlank()) addQueryParameter("name", name.trim())
                             if (tag.isNotBlank()) addQueryParameter("tag", tag.trim())
+                            addQueryParameter("language", "english")
                             addQueryParameter("hidebroken", "true")
                             addQueryParameter("order", "clickcount")
                             addQueryParameter("reverse", "true")
@@ -79,9 +80,10 @@ class RadioApi(
                 country = s("countrycode"),
                 codec = s("codec"),
                 bitrate = o["bitrate"]?.jsonPrimitive?.intOrNull ?: 0,
+                plays = o["clickcount"]?.jsonPrimitive?.intOrNull ?: 0,
                 hls = (o["hls"]?.jsonPrimitive?.intOrNull ?: 0) == 1 ||
                     o["hls"]?.jsonPrimitive?.booleanOrNull == true
             )
-        }.distinctBy { it.uuid }
+        }.distinctBy { it.uuid }.sortedByDescending { it.plays }
     }
 }

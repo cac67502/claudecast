@@ -13,7 +13,8 @@ data class Station(
     val country: String = "",
     val codec: String = "",
     val bitrate: Int = 0,
-    val hls: Boolean = false
+    val hls: Boolean = false,
+    val plays: Int = 0          // listens in the last 24 hours (Radio Browser "clickcount")
 )
 
 /** A song on the phone (bought, ripped from CD, or recorded off the radio). */
