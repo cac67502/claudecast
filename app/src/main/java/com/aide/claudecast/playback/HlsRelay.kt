@@ -134,6 +134,9 @@ class HlsRelay(private val context: Context) {
         val keys = HashMap<String, ByteArray>()
         val sent = LinkedHashSet<String>()
         var first = true
+        var chunks = 0L
+        var lastReport = System.currentTimeMillis()
+        val seenBreaks = HashSet<Long>()
         val sc = scope ?: return
         while (sc.isActive) {
             val fetched = runCatching { getPlaylist(mediaPlaylistUrl) }.getOrNull()
@@ -154,6 +157,12 @@ class HlsRelay(private val context: Context) {
                     return
                 }
                 sent += seg.url
+                chunks++
+                if (seg.afterBreak && seenBreaks.add(seg.seq)) onLog?.invoke("Stream change (ad break or program switch) at chunk ${seg.seq}")
+                if (System.currentTimeMillis() - lastReport > 60_000) {
+                    lastReport = System.currentTimeMillis()
+                    onLog?.invoke("Still sending: $chunks chunks so far")
+                }
                 if (sent.size > 200) sent.remove(sent.first())
             }
             if ("#EXT-X-ENDLIST" in text && todo.isEmpty()) return
@@ -164,7 +173,9 @@ class HlsRelay(private val context: Context) {
 
     /* ---------------- HLS parsing ---------------- */
 
-    private data class Segment(val url: String, val seq: Long, val keyUrl: String?, val iv: ByteArray?)
+    private data class Segment(
+        val url: String, val seq: Long, val keyUrl: String?, val iv: ByteArray?, val afterBreak: Boolean = false
+    )
 
     private fun resolveMediaPlaylist(start: String): String {
         val (text, url) = getPlaylist(start)
@@ -191,9 +202,11 @@ class HlsRelay(private val context: Context) {
         var seq = Regex("#EXT-X-MEDIA-SEQUENCE:(\\d+)").find(text)?.groupValues?.get(1)?.toLongOrNull() ?: 0
         var keyUrl: String? = null
         var iv: ByteArray? = null
+        var brk = false
         for (raw in text.lines()) {
             val l = raw.trim()
             when {
+                l.startsWith("#EXT-X-DISCONTINUITY") && !l.startsWith("#EXT-X-DISCONTINUITY-SEQUENCE") -> brk = true
                 l.startsWith("#EXT-X-KEY") -> {
                     val method = Regex("METHOD=([^,]+)").find(l)?.groupValues?.get(1)
                     if (method == "AES-128") {
@@ -202,7 +215,7 @@ class HlsRelay(private val context: Context) {
                     } else { keyUrl = null; iv = null }
                 }
                 l.isEmpty() || l.startsWith("#") -> Unit
-                else -> { out += Segment(URL(URL(base), l).toString(), seq, keyUrl, iv); seq++ }
+                else -> { out += Segment(URL(URL(base), l).toString(), seq, keyUrl, iv, brk); brk = false; seq++ }
             }
         }
         return out

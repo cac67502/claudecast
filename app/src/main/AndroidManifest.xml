@@ -49,6 +49,11 @@
 
         <!-- Volume Guard: undoes Android's "Volume lowered to safer level" -->
         <service
+            android:name=".playback.CastKeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <service
             android:name=".volumeguard.VolumeGuardService"
             android:label="ClaudeCast Volume Guard"
             android:exported="true"

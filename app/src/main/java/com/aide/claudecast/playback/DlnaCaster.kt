@@ -254,6 +254,7 @@ class DlnaCaster(private val context: Context) {
             }
         }
         startPolling()
+        CastKeepAliveService.start(context, device.name)
         true
     }
 
@@ -280,6 +281,7 @@ class DlnaCaster(private val context: Context) {
         pollJob?.cancel()
         if (d != null) runCatching { soap(d, "Stop", "", ignoreErrors = true) }
         relay.stop()
+        CastKeepAliveService.stop(context)
         _state.value = _state.value.copy(device = null, playing = false, title = "", positionMs = 0, durationMs = 0)
         pos
     }
