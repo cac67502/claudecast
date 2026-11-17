@@ -35,6 +35,11 @@ class HlsRelay(private val context: Context) {
 
     class Unsupported(msg: String) : Exception(msg)
 
+    private companion object {
+        const val UA = "Mozilla/5.0 (Linux; Android 15; Pixel) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36"
+    }
+
     private val http = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
@@ -57,11 +62,16 @@ class HlsRelay(private val context: Context) {
     suspend fun start(hlsUrl: String): Pair<String, String> {
         stop()
         val media = resolveMediaPlaylist(hlsUrl)
-        val text = get(media)
+        val text = getPlaylist(media).first
+        onLog?.invoke("Playlist OK: ${media.substringBefore('?').takeLast(80)}")
         if ("#EXT-X-MAP" in text) throw Unsupported("This channel uses a newer stream format the converter can't handle.")
         if ("METHOD=SAMPLE-AES" in text) throw Unsupported("This channel is copy-protected and can't be cast.")
         val firstSeg = segments(media, text).lastOrNull() ?: throw Unsupported("Empty stream.")
-        val sample = fetchSegment(firstSeg, keyCache = HashMap())
+        val sample = try {
+            fetchSegment(firstSeg, keyCache = HashMap())
+        } catch (e: Exception) {
+            throw RuntimeException("first chunk failed: ${e.message}")
+        }
         contentType = when {
             sample.isNotEmpty() && sample[0] == 0x47.toByte() -> "video/mp2t"
             sample.size > 1 && sample[0] == 0xFF.toByte() && (sample[1].toInt() and 0xF0) == 0xF0 -> "audio/aac"
@@ -126,9 +136,10 @@ class HlsRelay(private val context: Context) {
         var first = true
         val sc = scope ?: return
         while (sc.isActive) {
-            val text = runCatching { get(mediaPlaylistUrl) }.getOrNull()
-            if (text == null) { delay(2000); continue }
-            val segs = segments(mediaPlaylistUrl, text)
+            val fetched = runCatching { getPlaylist(mediaPlaylistUrl) }.getOrNull()
+            if (fetched == null) { delay(2000); continue }
+            val (text, base) = fetched
+            val segs = segments(base, text)
             // Start near the live edge, like a TV channel.
             val todo = (if (first) segs.takeLast(3) else segs).filter { it.url !in sent }
             first = false
@@ -155,8 +166,8 @@ class HlsRelay(private val context: Context) {
 
     private data class Segment(val url: String, val seq: Long, val keyUrl: String?, val iv: ByteArray?)
 
-    private fun resolveMediaPlaylist(url: String): String {
-        val text = get(url)
+    private fun resolveMediaPlaylist(start: String): String {
+        val (text, url) = getPlaylist(start)
         if ("#EXT-X-STREAM-INF" !in text) return url
         // Master playlist: pick a variant around 3 Mbps that carries its own audio.
         val lines = text.lines()
@@ -212,10 +223,19 @@ class HlsRelay(private val context: Context) {
 
     private fun get(url: String): String = String(getBytes(url))
 
-    private fun getBytes(url: String): ByteArray {
-        val req = Request.Builder().url(url).header("User-Agent", "ClaudeCast").build()
+    /** Fetches a playlist and returns it with its final address (after redirects). */
+    private fun getPlaylist(url: String): Pair<String, String> {
+        val req = Request.Builder().url(url).header("User-Agent", UA).build()
         http.newCall(req).execute().use { r ->
-            if (!r.isSuccessful) throw RuntimeException("HTTP ${r.code}")
+            if (!r.isSuccessful) throw RuntimeException("playlist HTTP ${r.code} from ${r.request.url.host}")
+            return (r.body?.string().orEmpty()) to r.request.url.toString()
+        }
+    }
+
+    private fun getBytes(url: String): ByteArray {
+        val req = Request.Builder().url(url).header("User-Agent", UA).build()
+        http.newCall(req).execute().use { r ->
+            if (!r.isSuccessful) throw RuntimeException("HTTP ${r.code} from ${r.request.url.host}")
             return r.body?.bytes() ?: ByteArray(0)
         }
     }
