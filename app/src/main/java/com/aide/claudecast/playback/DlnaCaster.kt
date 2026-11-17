@@ -73,6 +73,7 @@ class DlnaCaster(private val context: Context) {
     val state: StateFlow<CastState> = _state.asStateFlow()
 
     private var pollJob: Job? = null
+    private val relay = HlsRelay(context)
 
     val isCasting: Boolean get() = _state.value.device != null
 
@@ -161,8 +162,15 @@ class DlnaCaster(private val context: Context) {
 
     /* ---------------- Control ---------------- */
 
-    suspend fun start(device: CastDevice, item: CastItem): Boolean = withContext(Dispatchers.IO) {
+    suspend fun start(device: CastDevice, original: CastItem): Boolean = withContext(Dispatchers.IO) {
         try {
+            // Most TVs won't take HLS over DLNA, so the phone converts it to one continuous stream.
+            relay.stop()
+            val item = if (original.mime == "application/vnd.apple.mpegurl") {
+                _state.value = _state.value.copy(message = "Converting the stream for the TV…")
+                val (url, mime) = relay.start(original.url)
+                original.copy(url = url, mime = mime, isVideo = mime.startsWith("video"))
+            } else original
             val meta = didl(item)
             soap(device, "Stop", "", ignoreErrors = true)
             soap(device, "SetAVTransportURI",
@@ -181,7 +189,12 @@ class DlnaCaster(private val context: Context) {
             }
             startPolling()
             true
+        } catch (e: HlsRelay.Unsupported) {
+            relay.stop()
+            _state.value = _state.value.copy(message = e.message ?: "This channel can't be cast.")
+            false
         } catch (e: Exception) {
+            relay.stop()
             _state.value = _state.value.copy(message = "${device.name} wouldn't play that. Some TVs only accept certain formats.")
             false
         }
@@ -209,6 +222,7 @@ class DlnaCaster(private val context: Context) {
         val pos = _state.value.positionMs
         pollJob?.cancel()
         if (d != null) runCatching { soap(d, "Stop", "", ignoreErrors = true) }
+        relay.stop()
         _state.value = _state.value.copy(device = null, playing = false, title = "", positionMs = 0, durationMs = 0)
         pos
     }
@@ -255,7 +269,7 @@ class DlnaCaster(private val context: Context) {
             """xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">""" +
             """<item id="0" parentID="-1" restricted="1"><dc:title>${esc(item.title)}</dc:title>""" +
             "<upnp:class>$cls</upnp:class>" +
-            """<res protocolInfo="http-get:*:${item.mime}:*">${esc(item.url)}</res></item></DIDL-Lite>"""
+            """<res protocolInfo="http-get:*:${item.mime}:DLNA.ORG_OP=00;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000">${esc(item.url)}</res></item></DIDL-Lite>"""
     }
 
     private fun tag(xml: String, name: String) =
