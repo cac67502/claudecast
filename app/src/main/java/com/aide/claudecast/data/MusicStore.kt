@@ -19,7 +19,8 @@ internal data class MusicData(
     val heard: List<HeardSong> = emptyList(),
     val playlists: List<Playlist> = emptyList(),
     val recordings: List<RecordingMeta> = emptyList(),
-    val captureEnabled: Boolean = true
+    val captureEnabled: Boolean = true,
+    val localState: String = ""     // two-letter code, e.g. "KS"
 )
 
 /** File-backed store for radio favorites, saved songs, playlists and recording info. */
@@ -39,6 +40,8 @@ class MusicStore(context: Context) {
     val recordings: StateFlow<List<RecordingMeta>> = _recordings.asStateFlow()
     private val _captureEnabled = MutableStateFlow(true)
     val captureEnabled: StateFlow<Boolean> = _captureEnabled.asStateFlow()
+    private val _localState = MutableStateFlow("")
+    val localState: StateFlow<String> = _localState.asStateFlow()
 
     suspend fun load() = withContext(Dispatchers.IO) {
         val d = runCatching {
@@ -54,6 +57,7 @@ class MusicStore(context: Context) {
         _playlists.value = d.playlists
         _recordings.value = d.recordings
         _captureEnabled.value = d.captureEnabled
+        _localState.value = d.localState
     }
 
     @Synchronized
@@ -105,4 +109,5 @@ class MusicStore(context: Context) {
     }
 
     fun setCaptureEnabled(on: Boolean) = update { d -> d.copy(captureEnabled = on) }
+    fun setLocalState(code: String) = update { d -> d.copy(localState = code) }
 }

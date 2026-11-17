@@ -36,15 +36,34 @@ class RadioApi(
 
     /** English-language stations by name and/or genre, most listened to (last 24h) first. */
     suspend fun search(name: String = "", tag: String = "", limit: Int = 60): List<Station> =
+        query(mapOf("name" to name, "tag" to tag, "language" to "english"), limit)
+
+    /**
+     * Stations in a US state, most listened to first. The directory lists some stations
+     * under the full name ("Kansas") and some under the abbreviation ("KS"), so ask for both.
+     * No language filter: many local stations leave that field blank.
+     */
+    suspend fun searchLocal(stateName: String, stateCode: String, limit: Int = 100): List<Station> {
+        val full = runCatching {
+            query(mapOf("countrycode" to "US", "state" to stateName, "stateExact" to "true"), limit)
+        }
+        val abbr = runCatching {
+            query(mapOf("countrycode" to "US", "state" to stateCode, "stateExact" to "true"), limit)
+        }
+        if (full.isFailure && abbr.isFailure) throw full.exceptionOrNull()!!
+        return (full.getOrDefault(emptyList()) + abbr.getOrDefault(emptyList()))
+            .distinctBy { it.uuid }
+            .sortedByDescending { it.plays }
+    }
+
+    private suspend fun query(params: Map<String, String>, limit: Int): List<Station> =
         withContext(Dispatchers.IO) {
             var lastError: Exception? = null
             for (base in mirrors) {
                 try {
                     val url = "$base/json/stations/search".toHttpUrl().newBuilder()
                         .apply {
-                            if (name.isNotBlank()) addQueryParameter("name", name.trim())
-                            if (tag.isNotBlank()) addQueryParameter("tag", tag.trim())
-                            addQueryParameter("language", "english")
+                            params.forEach { (k, v) -> if (v.isNotBlank()) addQueryParameter(k, v.trim()) }
                             addQueryParameter("hidebroken", "true")
                             addQueryParameter("order", "clickcount")
                             addQueryParameter("reverse", "true")

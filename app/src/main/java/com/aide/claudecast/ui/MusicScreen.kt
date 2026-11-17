@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Radio
@@ -126,10 +127,44 @@ class MusicViewModel : ViewModel() {
         }
     }
 
+    fun searchLocal(code: String) {
+        val name = usStates[code] ?: return
+        viewModelScope.launch {
+            _loading.value = true
+            _error.value = null
+            _resultsLabel.value = "Local: $name"
+            try {
+                _stations.value = radio.searchLocal(name, code)
+                if (_stations.value.isEmpty()) _error.value = "No stations listed for $name yet."
+            } catch (e: Exception) {
+                _error.value = "Couldn't reach the radio directory. Check your connection."
+            } finally {
+                _loading.value = false
+            }
+        }
+    }
+
     fun refreshLibrary() { viewModelScope.launch { library.refresh() } }
 
     fun deleteRecording(song: Song) { viewModelScope.launch { library.deleteRecording(song) } }
 }
+
+val usStates = linkedMapOf(
+    "AL" to "Alabama", "AK" to "Alaska", "AZ" to "Arizona", "AR" to "Arkansas", "CA" to "California",
+    "CO" to "Colorado", "CT" to "Connecticut", "DE" to "Delaware", "DC" to "District of Columbia",
+    "FL" to "Florida", "GA" to "Georgia", "HI" to "Hawaii", "ID" to "Idaho", "IL" to "Illinois",
+    "IN" to "Indiana", "IA" to "Iowa", "KS" to "Kansas", "KY" to "Kentucky", "LA" to "Louisiana",
+    "ME" to "Maine", "MD" to "Maryland", "MA" to "Massachusetts", "MI" to "Michigan",
+    "MN" to "Minnesota", "MS" to "Mississippi", "MO" to "Missouri", "MT" to "Montana",
+    "NE" to "Nebraska", "NV" to "Nevada", "NH" to "New Hampshire", "NJ" to "New Jersey",
+    "NM" to "New Mexico", "NY" to "New York", "NC" to "North Carolina", "ND" to "North Dakota",
+    "OH" to "Ohio", "OK" to "Oklahoma", "OR" to "Oregon", "PA" to "Pennsylvania",
+    "RI" to "Rhode Island", "SC" to "South Carolina", "SD" to "South Dakota", "TN" to "Tennessee",
+    "TX" to "Texas", "UT" to "Utah", "VT" to "Vermont", "VA" to "Virginia", "WA" to "Washington",
+    "WV" to "West Virginia", "WI" to "Wisconsin", "WY" to "Wyoming"
+)
+
+private const val LOCAL = "@local"
 
 private val genres = listOf(
     "rock", "classic rock", "country", "pop", "hits", "80s", "90s", "oldies", "hip hop",
@@ -184,8 +219,11 @@ private fun RadioTab(vm: MusicViewModel, onOpenPlayer: () -> Unit) {
     val label by vm.resultsLabel.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
     var genre by rememberSaveable { mutableStateOf("") }
+    val localState by vm.store.localState.collectAsStateWithLifecycle()
+    var pickingState by remember { mutableStateOf(false) }
 
     val play: (Station) -> Unit = { vm.player.playStation(it); onOpenPlayer() }
+    val showLocal: (String) -> Unit = { code -> genre = LOCAL; vm.searchLocal(code) }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
         item {
@@ -211,6 +249,14 @@ private fun RadioTab(vm: MusicViewModel, onOpenPlayer: () -> Unit) {
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                item {
+                    FilterChip(
+                        selected = genre == LOCAL,
+                        onClick = { if (localState.isBlank()) pickingState = true else showLocal(localState) },
+                        leadingIcon = { Icon(Icons.Rounded.LocationOn, null, Modifier.size(18.dp)) },
+                        label = { Text(if (localState.isBlank()) "Local" else "Local ($localState)") }
+                    )
+                }
                 items(genres) { g ->
                     FilterChip(
                         selected = genre == g,
@@ -227,6 +273,11 @@ private fun RadioTab(vm: MusicViewModel, onOpenPlayer: () -> Unit) {
             item { SectionHeader("Favorites") }
             items(favorites, key = { "fav-" + it.uuid }) { st ->
                 StationRow(st, isFavorite = true, onClick = { play(st) }, onStar = { vm.store.toggleFavorite(st) })
+            }
+        }
+        if (genre == LOCAL) item {
+            TextButton(onClick = { pickingState = true }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                Text("Change state")
             }
         }
         item { SectionHeader(label) }
@@ -249,6 +300,38 @@ private fun RadioTab(vm: MusicViewModel, onOpenPlayer: () -> Unit) {
             }
         }
     }
+    if (pickingState) StatePickerDialog(
+        current = localState,
+        onDismiss = { pickingState = false },
+        onPick = { code ->
+            pickingState = false
+            vm.store.setLocalState(code)
+            showLocal(code)
+        }
+    )
+}
+
+@Composable
+private fun StatePickerDialog(current: String, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Your state") },
+        text = {
+            LazyColumn(Modifier.height(400.dp)) {
+                items(usStates.entries.toList(), key = { it.key }) { (code, name) ->
+                    Text(
+                        name,
+                        color = if (code == current) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface,
+                        fontWeight = if (code == current) FontWeight.SemiBold else FontWeight.Normal,
+                        modifier = Modifier.fillMaxWidth().clickable { onPick(code) }.padding(vertical = 12.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @Composable
