@@ -74,7 +74,50 @@ class DlnaCaster(private val context: Context) {
     val state: StateFlow<CastState> = _state.asStateFlow()
 
     private var pollJob: Job? = null
-    private val relay = HlsRelay(context).also { r -> r.onLog = { log("Converter: $it") } }
+    private val relay = HlsRelay(context).also { r ->
+        r.onLog = { log("Converter: $it") }
+        r.onRestartNeeded = { reason -> restartTv(reason) }
+    }
+
+    /* The converted stream currently on the TV, for restarts. */
+    private var relayItem: CastItem? = null
+    private var relayMeta: String = ""
+    private var restartJob: Job? = null
+    private val recentRestarts = ArrayDeque<Long>()
+
+    /** Points the TV at a fresh copy of the converted stream (same spot, new connection). */
+    private fun restartTv(reason: String) {
+        val d = _state.value.device ?: return
+        val item = relayItem ?: return
+        if (restartJob?.isActive == true) return
+        restartJob = scope.launch {
+            val now = System.currentTimeMillis()
+            while (recentRestarts.isNotEmpty() && now - recentRestarts.first() > 60_000) recentRestarts.removeFirst()
+            if (recentRestarts.size >= 5) {
+                log("Too many restarts in a minute, giving up")
+                _state.value = _state.value.copy(message = "The TV keeps dropping this channel.")
+                return@launch
+            }
+            recentRestarts.addLast(now)
+            relay.restartCount++
+            val url = item.url.substringBefore('?') + "?r=" + relay.restartCount
+            delay(300)
+            try {
+                runCatching { soap(d, "Stop", "", ignoreErrors = true) }
+                soap(d, "SetAVTransportURI",
+                    "<CurrentURI>${esc(url)}</CurrentURI><CurrentURIMetaData>${esc(relayMeta)}</CurrentURIMetaData>")
+                var ok = false
+                repeat(4) {
+                    if (ok) return@repeat
+                    ok = runCatching { soap(d, "Play", "<Speed>1</Speed>") }.isSuccess
+                    if (!ok) delay(1000)
+                }
+                log(if (ok) "TV restarted after $reason" else "TV wouldn't restart after $reason")
+            } catch (e: Exception) {
+                log("Restart after $reason failed: ${e.message}")
+            }
+        }
+    }
 
     val isCasting: Boolean get() = _state.value.device != null
 
@@ -210,6 +253,7 @@ class DlnaCaster(private val context: Context) {
                 soap(device, "SetAVTransportURI",
                     "<CurrentURI>${esc(cand.url)}</CurrentURI><CurrentURIMetaData>${esc(meta)}</CurrentURIMetaData>")
                 log("TV accepted the stream (${cand.mime}${if (meta.isEmpty()) ", no metadata" else ""})")
+                if (original.mime == "application/vnd.apple.mpegurl") { relayItem = cand; relayMeta = meta } else relayItem = null
                 accepted = true
                 break
             } catch (e: Exception) {
@@ -280,6 +324,8 @@ class DlnaCaster(private val context: Context) {
         val pos = _state.value.positionMs
         pollJob?.cancel()
         if (d != null) runCatching { soap(d, "Stop", "", ignoreErrors = true) }
+        restartJob?.cancel()
+        relayItem = null
         relay.stop()
         CastKeepAliveService.stop(context)
         _state.value = _state.value.copy(device = null, playing = false, title = "", positionMs = 0, durationMs = 0)

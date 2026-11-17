@@ -51,6 +51,7 @@ class HlsRelay(private val context: Context) {
     private var wifiLock: WifiManager.WifiLock? = null
 
     var onLog: ((String) -> Unit)? = null
+    @Volatile var restartCount = 0
 
     @Volatile private var mediaPlaylistUrl: String = ""
     @Volatile private var contentType: String = "video/mp2t"
@@ -79,6 +80,9 @@ class HlsRelay(private val context: Context) {
             else -> throw Unsupported("This channel's chunks aren't in a format the converter can pass through.")
         }
         mediaPlaylistUrl = media
+        resumeSeq = null
+        totalChunks = 0
+        restartCount = 0
 
         val ip = wifiAddress() ?: throw Unsupported("Your phone needs to be on Wi-Fi to cast this.")
         val ss = ServerSocket(0, 8, ip)
@@ -129,41 +133,66 @@ class HlsRelay(private val context: Context) {
         }
     }
 
-    /** Follows the live playlist and writes each new chunk as it appears. */
+    /** Called when the TV must be told to reconnect: at a stream change, or after a drop. */
+    var onRestartNeeded: ((reason: String) -> Unit)? = null
+
+    /** Where the next TV connection should pick up (so a restart doesn't skip anything). */
+    @Volatile private var resumeSeq: Long? = null
+    @Volatile private var totalChunks = 0L
+
+    /**
+     * Follows the live playlist and writes each chunk as it appears. When the channel
+     * switches feeds (ads), many TVs can't follow the change inside one stream, so this
+     * connection ends there and the TV is restarted at that exact chunk.
+     */
     private suspend fun pump(out: OutputStream) {
         val keys = HashMap<String, ByteArray>()
-        val sent = LinkedHashSet<String>()
-        var first = true
-        var chunks = 0L
+        var lastSeq: Long? = null
+        var connChunks = 0
         var lastReport = System.currentTimeMillis()
-        val seenBreaks = HashSet<Long>()
         val sc = scope ?: return
+        val startAt = resumeSeq
+        if (startAt != null) onLog?.invoke("TV reconnected, continuing at chunk $startAt")
         while (sc.isActive) {
             val fetched = runCatching { getPlaylist(mediaPlaylistUrl) }.getOrNull()
             if (fetched == null) { delay(2000); continue }
             val (text, base) = fetched
             val segs = segments(base, text)
-            // Start near the live edge, like a TV channel.
-            val todo = (if (first) segs.takeLast(3) else segs).filter { it.url !in sent }
-            first = false
+            val todo = when {
+                lastSeq != null -> segs.filter { it.seq > lastSeq!! }
+                startAt != null && segs.any { it.seq >= startAt } -> segs.filter { it.seq >= startAt }
+                else -> segs.takeLast(3)    // start near the live edge, like a TV channel
+            }
             for (seg in todo) {
+                // A feed change partway through this connection: hand off to a fresh one.
+                if (seg.afterBreak && connChunks > 0) {
+                    resumeSeq = seg.seq
+                    onLog?.invoke("Stream change (ad break or program switch) at chunk ${seg.seq}, restarting TV there")
+                    onRestartNeeded?.invoke("stream change")
+                    return
+                }
                 val bytes = runCatching { fetchSegment(seg, keys) }.getOrNull() ?: continue
                 try {
                     out.write(bytes)
                     out.flush()
-                    if (sent.isEmpty()) onLog?.invoke("Sending video to the TV")
                 } catch (e: Exception) {
-                    onLog?.invoke("TV closed the connection")
+                    if (connChunks >= 2) {
+                        // A real drop, not the TV's quick format check. Pick up right after.
+                        resumeSeq = seg.seq
+                        onLog?.invoke("TV closed the connection at chunk ${seg.seq}, reconnecting")
+                        onRestartNeeded?.invoke("dropped")
+                    }
                     return
                 }
-                sent += seg.url
-                chunks++
-                if (seg.afterBreak && seenBreaks.add(seg.seq)) onLog?.invoke("Stream change (ad break or program switch) at chunk ${seg.seq}")
+                if (connChunks == 0) onLog?.invoke("Sending video to the TV")
+                connChunks++
+                totalChunks++
+                lastSeq = seg.seq
+                resumeSeq = seg.seq + 1
                 if (System.currentTimeMillis() - lastReport > 60_000) {
                     lastReport = System.currentTimeMillis()
-                    onLog?.invoke("Still sending: $chunks chunks so far")
+                    onLog?.invoke("Still sending: $totalChunks chunks so far")
                 }
-                if (sent.size > 200) sent.remove(sent.first())
             }
             if ("#EXT-X-ENDLIST" in text && todo.isEmpty()) return
             val target = Regex("#EXT-X-TARGETDURATION:(\\d+)").find(text)?.groupValues?.get(1)?.toLongOrNull() ?: 6
