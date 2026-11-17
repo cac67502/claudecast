@@ -10,6 +10,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.aide.claudecast.data.Episode
+import com.aide.claudecast.data.Channel
 import com.aide.claudecast.data.Song
 import com.aide.claudecast.data.Station
 import kotlinx.coroutines.CoroutineScope
@@ -22,7 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-enum class MediaKind { None, Podcast, Music, Radio }
+enum class MediaKind { None, Podcast, Music, Radio, Tv }
 
 data class PlayerUiState(
     val kind: MediaKind = MediaKind.None,
@@ -64,6 +65,11 @@ class PlayerController(
     private var kind = MediaKind.None
     private val _currentStation = MutableStateFlow<Station?>(null)
     val currentStation: StateFlow<Station?> = _currentStation.asStateFlow()
+    private val _currentChannel = MutableStateFlow<Channel?>(null)
+    val currentChannel: StateFlow<Channel?> = _currentChannel.asStateFlow()
+
+    /** The underlying player, for attaching a video surface (TV). */
+    val videoPlayer: Player? get() = controller
 
     private var defaultSpeed = 1.0f
 
@@ -123,7 +129,7 @@ class PlayerController(
                 st != null -> st.name
                 else -> player.mediaMetadata.artist?.toString() ?: ep?.podcastTitle.orEmpty()
             },
-            artworkUrl = ep?.artworkUrl ?: st?.favicon
+            artworkUrl = ep?.artworkUrl ?: st?.favicon ?: _currentChannel.value?.logo
         )
     }
 
@@ -172,6 +178,7 @@ class PlayerController(
         val idx = startIndex.coerceIn(0, episodes.lastIndex)
         queue = episodes
         kind = MediaKind.Podcast
+        _currentChannel.value = null
         _currentStation.value = null
         _currentEpisode.value = episodes[idx]
         val items = episodes.map { ep ->
@@ -202,6 +209,7 @@ class PlayerController(
         val idx = startIndex.coerceIn(0, songs.lastIndex)
         queue = emptyList()
         kind = MediaKind.Music
+        _currentChannel.value = null
         _currentStation.value = null
         _currentEpisode.value = null
         val items = songs.map { s ->
@@ -230,6 +238,7 @@ class PlayerController(
         val c = controller ?: return
         queue = emptyList()
         kind = MediaKind.Radio
+        _currentChannel.value = null
         _currentEpisode.value = null
         _currentStation.value = station
         val item = MediaItem.Builder()
@@ -241,6 +250,37 @@ class PlayerController(
                     .setTitle(station.name)
                     .setArtist(station.name)
                     .setArtworkUri(station.favicon?.let { Uri.parse(it) })
+                    .build()
+            )
+            .build()
+        c.shuffleModeEnabled = false
+        c.repeatMode = Player.REPEAT_MODE_OFF
+        c.setMediaItem(item)
+        c.prepare()
+        c.setPlaybackSpeed(1.0f)
+        c.playWhenReady = true
+        syncFrom(c)
+    }
+
+    /** Play a live TV channel. */
+    fun playChannel(channel: Channel) {
+        val c = controller ?: return
+        queue = emptyList()
+        kind = MediaKind.Tv
+        _currentEpisode.value = null
+        _currentStation.value = null
+        _currentChannel.value = channel
+        val item = MediaItem.Builder()
+            .setMediaId("tv:" + channel.id)
+            .setUri(channel.url)
+            .apply {
+                if (".m3u8" in channel.url.lowercase()) setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+            }
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(channel.name)
+                    .setArtist("Live TV")
+                    .setArtworkUri(channel.logo?.let { Uri.parse(it) })
                     .build()
             )
             .build()
@@ -276,6 +316,10 @@ class PlayerController(
         if (!c.isPlaying && kind == MediaKind.Radio) {
             // Rejoin the live broadcast instead of resuming a stale buffer.
             _currentStation.value?.let { playStation(it) }
+            return
+        }
+        if (!c.isPlaying && kind == MediaKind.Tv) {
+            _currentChannel.value?.let { playChannel(it) }
             return
         }
         if (c.isPlaying) {

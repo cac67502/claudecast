@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
@@ -18,6 +19,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -33,11 +35,12 @@ import com.aide.claudecast.playback.MediaKind
 sealed class Dest(val route: String, val label: String, val icon: ImageVector) {
     data object Library : Dest("library", "Library", Icons.Rounded.LibraryBooks)
     data object Music : Dest("music", "Music", Icons.Rounded.MusicNote)
+    data object Tv : Dest("tv", "TV", Icons.Rounded.LiveTv)
     data object Search : Dest("search", "Search", Icons.Rounded.Search)
     data object Settings : Dest("settings", "Settings", Icons.Rounded.Settings)
 }
 
-private val bottomDests = listOf(Dest.Library, Dest.Music, Dest.Search, Dest.Settings)
+private val bottomDests = listOf(Dest.Library, Dest.Music, Dest.Tv, Dest.Search, Dest.Settings)
 
 private fun encodeArg(s: String): String =
     Base64.encodeToString(s.toByteArray(), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
@@ -54,7 +57,13 @@ fun ClaudeCastRoot() {
 
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
-    val showBars = currentRoute in setOf(Dest.Library.route, Dest.Music.route, Dest.Search.route, Dest.Settings.route)
+    val showBars = currentRoute in setOf(Dest.Library.route, Dest.Music.route, Dest.Tv.route, Dest.Search.route, Dest.Settings.route)
+
+    // Picture-in-picture: show only the video.
+    if (PipState.active && playerState.kind == MediaKind.Tv) {
+        TvVideo(Modifier.fillMaxSize(), showControls = false)
+        return
+    }
 
     val openPodcast: (String) -> Unit = { feedUrl -> nav.navigate("podcast/${encodeArg(feedUrl)}") }
 
@@ -118,6 +127,9 @@ fun ClaudeCastRoot() {
             composable(Dest.Music.route) {
                 MusicScreen(onOpenPlayer = { nav.navigate("player") })
             }
+            composable(Dest.Tv.route) {
+                TvScreen(onOpenPlayer = { nav.navigate("player") })
+            }
             composable(Dest.Settings.route) { SettingsScreen() }
             composable("podcast/{feedArg}") { entry ->
                 val feedUrl = decodeArg(entry.arguments?.getString("feedArg").orEmpty())
@@ -128,11 +140,18 @@ fun ClaudeCastRoot() {
                 )
             }
             composable("player") {
-                if (playerState.kind == MediaKind.Music || playerState.kind == MediaKind.Radio)
+                if (playerState.kind == MediaKind.Tv)
+                    TvPlayerScreen(onBack = { nav.popBackStack() })
+                else if (playerState.kind == MediaKind.Music || playerState.kind == MediaKind.Radio)
                     MusicPlayerScreen(onBack = { nav.popBackStack() })
                 else
                     PlayerScreen(onBack = { nav.popBackStack() })
             }
         }
     }
+}
+
+/** True while the app is shrunk to a picture-in-picture window. */
+object PipState {
+    var active by androidx.compose.runtime.mutableStateOf(false)
 }

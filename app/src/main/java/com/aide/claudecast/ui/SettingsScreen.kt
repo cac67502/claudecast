@@ -125,7 +125,7 @@ fun SettingsScreen(vm: SettingsViewModel = viewModel()) {
 
             Spacer(Modifier.height(24.dp))
             Text(
-                "ClaudeCast v1.2  •  Podcasting 2.0",
+                "ClaudeCast v1.3  •  Podcasting 2.0",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

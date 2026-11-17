@@ -20,7 +20,8 @@ internal data class MusicData(
     val playlists: List<Playlist> = emptyList(),
     val recordings: List<RecordingMeta> = emptyList(),
     val captureEnabled: Boolean = true,
-    val localState: String = ""     // two-letter code, e.g. "KS"
+    val localState: String = "",    // two-letter code, e.g. "KS"
+    val tvFavorites: List<Channel> = emptyList()
 )
 
 /** File-backed store for radio favorites, saved songs, playlists and recording info. */
@@ -40,6 +41,8 @@ class MusicStore(context: Context) {
     val recordings: StateFlow<List<RecordingMeta>> = _recordings.asStateFlow()
     private val _captureEnabled = MutableStateFlow(true)
     val captureEnabled: StateFlow<Boolean> = _captureEnabled.asStateFlow()
+    private val _tvFavorites = MutableStateFlow<List<Channel>>(emptyList())
+    val tvFavorites: StateFlow<List<Channel>> = _tvFavorites.asStateFlow()
     private val _localState = MutableStateFlow("")
     val localState: StateFlow<String> = _localState.asStateFlow()
 
@@ -58,6 +61,7 @@ class MusicStore(context: Context) {
         _recordings.value = d.recordings
         _captureEnabled.value = d.captureEnabled
         _localState.value = d.localState
+        _tvFavorites.value = d.tvFavorites
     }
 
     @Synchronized
@@ -109,5 +113,10 @@ class MusicStore(context: Context) {
     }
 
     fun setCaptureEnabled(on: Boolean) = update { d -> d.copy(captureEnabled = on) }
+    fun toggleTvFavorite(c: Channel) = update { d ->
+        if (d.tvFavorites.any { it.id == c.id }) d.copy(tvFavorites = d.tvFavorites.filterNot { it.id == c.id })
+        else d.copy(tvFavorites = (d.tvFavorites + c).sortedBy { it.name.lowercase() })
+    }
+
     fun setLocalState(code: String) = update { d -> d.copy(localState = code) }
 }

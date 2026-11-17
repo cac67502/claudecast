@@ -7,6 +7,7 @@ import com.aide.claudecast.data.LocalStore
 import com.aide.claudecast.data.MusicLibrary
 import com.aide.claudecast.data.MusicStore
 import com.aide.claudecast.data.RadioApi
+import com.aide.claudecast.data.TvApi
 import com.aide.claudecast.data.Pc20Fetcher
 import com.aide.claudecast.data.PodcastRepository
 import com.aide.claudecast.data.SettingsStore
@@ -30,6 +31,8 @@ object ServiceLocator {
         private set
     lateinit var radio: RadioApi
         private set
+    lateinit var tv: TvApi
+        private set
     lateinit var recorder: StreamRecorder
         private set
 
@@ -45,6 +48,7 @@ object ServiceLocator {
         runBlocking { store.load(); music.load() }
         library = MusicLibrary(app, music)
         radio = RadioApi()
+        tv = TvApi(app)
 
         repo = PodcastRepository(ItunesApi(), FeedParser(), store, Pc20Fetcher())
         player = PlayerController(
