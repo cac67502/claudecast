@@ -93,7 +93,7 @@ class DlnaCaster(private val context: Context) {
         restartJob = scope.launch {
             val now = System.currentTimeMillis()
             while (recentRestarts.isNotEmpty() && now - recentRestarts.first() > 60_000) recentRestarts.removeFirst()
-            if (recentRestarts.size >= 5) {
+            if (recentRestarts.size >= 15) {
                 log("Too many restarts in a minute, giving up")
                 _state.value = _state.value.copy(message = "The TV keeps dropping this channel.")
                 return@launch
@@ -101,18 +101,22 @@ class DlnaCaster(private val context: Context) {
             recentRestarts.addLast(now)
             relay.restartCount++
             val url = item.url.substringBefore('?') + "?r=" + relay.restartCount
-            delay(300)
             try {
-                runCatching { soap(d, "Stop", "", ignoreErrors = true) }
-                soap(d, "SetAVTransportURI",
-                    "<CurrentURI>${esc(url)}</CurrentURI><CurrentURIMetaData>${esc(relayMeta)}</CurrentURIMetaData>")
+                // Switch the TV over while the old connection is still alive. Only stop
+                // first if the TV refuses to switch mid-play.
+                val setArgs = "<CurrentURI>${esc(url)}</CurrentURI><CurrentURIMetaData>${esc(relayMeta)}</CurrentURIMetaData>"
+                val switched = runCatching { soap(d, "SetAVTransportURI", setArgs) }.isSuccess
+                if (!switched) {
+                    runCatching { soap(d, "Stop", "", ignoreErrors = true) }
+                    soap(d, "SetAVTransportURI", setArgs)
+                }
                 var ok = false
                 repeat(4) {
                     if (ok) return@repeat
                     ok = runCatching { soap(d, "Play", "<Speed>1</Speed>") }.isSuccess
                     if (!ok) delay(1000)
                 }
-                log(if (ok) "TV restarted after $reason" else "TV wouldn't restart after $reason")
+                log(if (ok) "TV restarted after $reason${if (switched) "" else " (needed a stop first)"}" else "TV wouldn't restart after $reason")
             } catch (e: Exception) {
                 log("Restart after $reason failed: ${e.message}")
             }

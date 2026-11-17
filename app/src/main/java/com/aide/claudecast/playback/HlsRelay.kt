@@ -169,6 +169,7 @@ class HlsRelay(private val context: Context) {
                     resumeSeq = seg.seq
                     onLog?.invoke("Stream change (ad break or program switch) at chunk ${seg.seq}, restarting TV there")
                     onRestartNeeded?.invoke("stream change")
+                    holdOpen(out)
                     return
                 }
                 val bytes = runCatching { fetchSegment(seg, keys) }.getOrNull() ?: continue
@@ -197,6 +198,29 @@ class HlsRelay(private val context: Context) {
             if ("#EXT-X-ENDLIST" in text && todo.isEmpty()) return
             val target = Regex("#EXT-X-TARGETDURATION:(\\d+)").find(text)?.groupValues?.get(1)?.toLongOrNull() ?: 6
             delay((target * 1000 / 2).coerceIn(1000, 5000))
+        }
+    }
+
+    /**
+     * Keeps this connection alive with MPEG-TS filler (null packets, which TVs ignore)
+     * until the TV switches to the new connection, so it never sees the stream end
+     * and doesn't pop its "unable to connect" screen.
+     */
+    private suspend fun holdOpen(out: OutputStream) {
+        val filler = if (contentType == "video/mp2t") {
+            val pkt = ByteArray(188) { 0xFF.toByte() }.also {
+                it[0] = 0x47; it[1] = 0x1F; it[2] = 0xFF.toByte(); it[3] = 0x10
+            }
+            ByteArray(188 * 7).also { buf -> for (k in 0 until 7) pkt.copyInto(buf, k * 188) }
+        } else null
+        val until = System.currentTimeMillis() + 15_000
+        while (System.currentTimeMillis() < until) {
+            try {
+                if (filler != null) { out.write(filler); out.flush() }
+            } catch (e: Exception) {
+                return   // TV let go of the old connection: switch-over done
+            }
+            delay(400)
         }
     }
 
