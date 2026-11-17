@@ -71,6 +71,8 @@ class PlayerController(
 
     private val _currentMovie = MutableStateFlow<Movie?>(null)
     val currentMovie: StateFlow<Movie?> = _currentMovie.asStateFlow()
+    private var movieUrl: String = ""
+
     /** Saves a movie's resume point: (id, positionMs, durationMs). */
     var onMoviePosition: ((String, Long, Long) -> Unit)? = null
 
@@ -282,6 +284,7 @@ class PlayerController(
         _currentChannel.value = null
         _currentMovie.value = null
         _currentMovie.value = movie
+        movieUrl = url
         val item = MediaItem.Builder()
             .setMediaId("movie:" + movie.id)
             .setUri(url)
@@ -332,6 +335,62 @@ class PlayerController(
         c.setPlaybackSpeed(1.0f)
         c.playWhenReady = true
         syncFrom(c)
+    }
+
+    /**
+     * What's playing, in a form a TV can fetch itself, or null if it can't be cast
+     * (songs stored on the phone, or nothing playing).
+     */
+    fun castItem(): CastItem? {
+        val c = controller ?: return null
+        if (c.mediaItemCount == 0) return null
+        val pos = c.currentPosition.coerceAtLeast(0L)
+        fun isHls(u: String) = ".m3u8" in u.lowercase()
+        return when (kind) {
+            MediaKind.Podcast -> {
+                val id = c.currentMediaItem?.mediaId
+                val ep = queue.firstOrNull { it.id == id } ?: _currentEpisode.value ?: return null
+                val u = ep.enclosureUrl
+                if (!u.startsWith("http")) return null
+                val lower = u.lowercase().substringBefore('?')
+                val (mime, video) = when {
+                    lower.endsWith(".mp4") || lower.endsWith(".m4v") -> "video/mp4" to true
+                    lower.endsWith(".m4a") || lower.endsWith(".aac") -> "audio/mp4" to false
+                    else -> "audio/mpeg" to false
+                }
+                CastItem(u, ep.title, mime, video, isLive = false, startMs = pos)
+            }
+            MediaKind.Radio -> {
+                val st = _currentStation.value ?: return null
+                val mime = when {
+                    st.hls || isHls(st.url) -> "application/vnd.apple.mpegurl"
+                    st.codec.contains("aac", true) -> "audio/aac"
+                    else -> "audio/mpeg"
+                }
+                CastItem(st.url, st.name, mime, isVideo = false, isLive = true, startMs = 0)
+            }
+            MediaKind.Tv -> {
+                val ch = _currentChannel.value ?: return null
+                val mime = if (isHls(ch.url)) "application/vnd.apple.mpegurl" else "video/mp4"
+                CastItem(ch.url, ch.name, mime, isVideo = true, isLive = true, startMs = 0)
+            }
+            MediaKind.Movie -> {
+                val m = _currentMovie.value ?: return null
+                if (movieUrl.isBlank()) return null
+                CastItem(movieUrl, m.title, "video/mp4", isVideo = true, isLive = false, startMs = pos)
+            }
+            else -> null   // songs on the phone: the TV can't reach them
+        }
+    }
+
+    fun pause() { controller?.let { if (it.isPlaying) togglePlayPause() } }
+
+    /** Pick up on the phone where the TV left off. */
+    fun resumeAfterCast(positionMs: Long, wasLive: Boolean) {
+        val c = controller ?: return
+        if (wasLive) { togglePlayPause(); return }   // rejoins the live stream
+        if (positionMs > 0) c.seekTo(positionMs)
+        c.play()
     }
 
     fun next() { controller?.let { if (it.hasNextMediaItem()) it.seekToNextMediaItem() } }

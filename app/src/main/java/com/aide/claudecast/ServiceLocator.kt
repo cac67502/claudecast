@@ -12,6 +12,7 @@ import com.aide.claudecast.data.MovieApi
 import com.aide.claudecast.data.Pc20Fetcher
 import com.aide.claudecast.data.PodcastRepository
 import com.aide.claudecast.data.SettingsStore
+import com.aide.claudecast.playback.DlnaCaster
 import com.aide.claudecast.playback.PlayerController
 import com.aide.claudecast.playback.StreamRecorder
 import kotlinx.coroutines.runBlocking
@@ -36,6 +37,8 @@ object ServiceLocator {
         private set
     lateinit var movies: MovieApi
         private set
+    lateinit var caster: DlnaCaster
+        private set
     lateinit var recorder: StreamRecorder
         private set
 
@@ -53,6 +56,7 @@ object ServiceLocator {
         radio = RadioApi()
         tv = TvApi(app)
         movies = MovieApi(app)
+        caster = DlnaCaster(app)
 
         repo = PodcastRepository(ItunesApi(), FeedParser(), store, Pc20Fetcher())
         player = PlayerController(

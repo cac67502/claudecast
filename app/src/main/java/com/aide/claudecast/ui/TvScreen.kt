@@ -441,6 +441,7 @@ fun TvPlayerScreen(onBack: () -> Unit) {
                             tint = if (fav) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+                CastButton()
                 IconButton(onClick = { fullscreen = true }) { Icon(Icons.Rounded.Fullscreen, "Full screen") }
             },
             colors = TopAppBarDefaults.topAppBarColors(

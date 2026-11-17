@@ -77,6 +77,7 @@ fun MusicPlayerScreen(onBack: () -> Unit) {
             navigationIcon = {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
             },
+            actions = { CastButton() },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,
                 titleContentColor = MaterialTheme.colorScheme.onBackground
