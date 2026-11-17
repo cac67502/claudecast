@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -100,6 +102,7 @@ private fun CastDialog(onDismiss: () -> Unit) {
                     Spacer(Modifier.height(8.dp))
                     Text("Use the TV remote for volume.", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    CastLog(cast.log)
                 }
             },
             confirmButton = {
@@ -164,6 +167,7 @@ private fun CastDialog(onDismiss: () -> Unit) {
                     Spacer(Modifier.height(8.dp))
                     Text(msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
+                CastLog(cast.log)
             }
         },
         confirmButton = {
@@ -171,4 +175,30 @@ private fun CastDialog(onDismiss: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+/** Collapsible step-by-step log, for troubleshooting a TV that won't play something. */
+@Composable
+private fun CastLog(lines: List<String>) {
+    if (lines.isEmpty()) return
+    var open by remember { mutableStateOf(false) }
+    TextButton(onClick = { open = !open }) { Text(if (open) "Hide details" else "Show details") }
+    if (open) {
+        androidx.compose.material3.Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            androidx.compose.foundation.text.selection.SelectionContainer {
+                Text(
+                    lines.joinToString("\n"),
+                    modifier = Modifier.heightIn(max = 220.dp)
+                        .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                        .padding(8.dp),
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp)
+                )
+            }
+        }
+    }
 }

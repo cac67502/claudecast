@@ -54,7 +54,8 @@ data class CastState(
     val positionMs: Long = 0,
     val durationMs: Long = 0,
     val isLive: Boolean = false,
-    val message: String = ""
+    val message: String = "",
+    val log: List<String> = emptyList()
 )
 
 /**
@@ -73,9 +74,16 @@ class DlnaCaster(private val context: Context) {
     val state: StateFlow<CastState> = _state.asStateFlow()
 
     private var pollJob: Job? = null
-    private val relay = HlsRelay(context)
+    private val relay = HlsRelay(context).also { r -> r.onLog = { log("Converter: $it") } }
 
     val isCasting: Boolean get() = _state.value.device != null
+
+    private fun log(line: String) {
+        val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
+        _state.value = _state.value.copy(log = (listOf("$ts  $line") + _state.value.log).take(40))
+    }
+
+    class SoapError(msg: String) : Exception(msg)
 
     /* ---------------- Discovery ---------------- */
 
@@ -163,41 +171,90 @@ class DlnaCaster(private val context: Context) {
     /* ---------------- Control ---------------- */
 
     suspend fun start(device: CastDevice, original: CastItem): Boolean = withContext(Dispatchers.IO) {
-        try {
-            // Most TVs won't take HLS over DLNA, so the phone converts it to one continuous stream.
-            relay.stop()
-            val item = if (original.mime == "application/vnd.apple.mpegurl") {
-                _state.value = _state.value.copy(message = "Converting the stream for the TV…")
+        relay.stop()
+        log("Casting \"${original.title}\" to ${device.name} (${device.model})")
+        log("Source: ${original.mime} ${original.url.take(120)}")
+
+        // Step 1: most TVs won't take HLS over DLNA, so the phone converts it.
+        val item = if (original.mime == "application/vnd.apple.mpegurl") {
+            _state.value = _state.value.copy(message = "Converting the stream for the TV…")
+            try {
                 val (url, mime) = relay.start(original.url)
+                log("Converter ready: $mime at $url")
                 original.copy(url = url, mime = mime, isVideo = mime.startsWith("video"))
-            } else original
-            val meta = didl(item)
-            soap(device, "Stop", "", ignoreErrors = true)
-            soap(device, "SetAVTransportURI",
-                "<CurrentURI>${esc(item.url)}</CurrentURI><CurrentURIMetaData>${esc(meta)}</CurrentURIMetaData>")
-            soap(device, "Play", "<Speed>1</Speed>")
-            _state.value = _state.value.copy(
-                device = device, title = item.title, playing = true, isLive = item.isLive,
-                positionMs = 0, durationMs = 0, message = ""
-            )
-            if (!item.isLive && item.startMs > 5000) {
-                // TVs often reject a seek until playback has actually started.
-                scope.launch {
-                    delay(3000)
-                    runCatching { soap(device, "Seek", "<Unit>REL_TIME</Unit><Target>${hms(item.startMs)}</Target>") }
-                }
+            } catch (e: HlsRelay.Unsupported) {
+                relay.stop(); log("Converter: ${e.message}")
+                _state.value = _state.value.copy(message = e.message ?: "This channel can't be cast.")
+                return@withContext false
+            } catch (e: Exception) {
+                relay.stop(); log("Converter failed: ${e.javaClass.simpleName} ${e.message}")
+                _state.value = _state.value.copy(message = "The phone couldn't load this channel to convert it (${e.message}).")
+                return@withContext false
             }
-            startPolling()
-            true
-        } catch (e: HlsRelay.Unsupported) {
-            relay.stop()
-            _state.value = _state.value.copy(message = e.message ?: "This channel can't be cast.")
-            false
-        } catch (e: Exception) {
-            relay.stop()
-            _state.value = _state.value.copy(message = "${device.name} wouldn't play that. Some TVs only accept certain formats.")
-            false
+        } else original
+
+        // Step 2: hand the TV the URL. Some TVs reject certain metadata, so fall back.
+        runCatching { soap(device, "Stop", "", ignoreErrors = true) }
+        val attempts = buildList {
+            add(item to didl(item))
+            add(item to "")
+            if (item.mime == "video/mp2t") {
+                val alt = item.copy(mime = "video/mpeg")
+                add(alt to didl(alt))
+            }
         }
+        var accepted = false
+        var lastErr = ""
+        for ((cand, meta) in attempts) {
+            try {
+                soap(device, "SetAVTransportURI",
+                    "<CurrentURI>${esc(cand.url)}</CurrentURI><CurrentURIMetaData>${esc(meta)}</CurrentURIMetaData>")
+                log("TV accepted the stream (${cand.mime}${if (meta.isEmpty()) ", no metadata" else ""})")
+                accepted = true
+                break
+            } catch (e: Exception) {
+                lastErr = e.message.orEmpty()
+                log("SetAVTransportURI rejected (${cand.mime}${if (meta.isEmpty()) ", no metadata" else ""}): $lastErr")
+            }
+        }
+        if (!accepted) {
+            relay.stop()
+            _state.value = _state.value.copy(message = "${device.name} refused the stream: $lastErr")
+            return@withContext false
+        }
+
+        // Step 3: Play. Samsungs often need a moment after SetAVTransportURI.
+        var played = false
+        repeat(4) { n ->
+            if (played) return@repeat
+            try {
+                soap(device, "Play", "<Speed>1</Speed>")
+                played = true
+                log("Play accepted")
+            } catch (e: Exception) {
+                lastErr = e.message.orEmpty()
+                log("Play attempt ${n + 1} rejected: $lastErr")
+                delay(1200)
+            }
+        }
+        if (!played) {
+            relay.stop()
+            _state.value = _state.value.copy(message = "${device.name} wouldn't start playing: $lastErr")
+            return@withContext false
+        }
+
+        _state.value = _state.value.copy(
+            device = device, title = item.title, playing = true, isLive = item.isLive,
+            positionMs = 0, durationMs = 0, message = ""
+        )
+        if (!item.isLive && item.startMs > 5000) {
+            scope.launch {
+                delay(3000)
+                runCatching { soap(device, "Seek", "<Unit>REL_TIME</Unit><Target>${hms(item.startMs)}</Target>") }
+            }
+        }
+        startPolling()
+        true
     }
 
     fun togglePlay() {
@@ -258,7 +315,13 @@ class DlnaCaster(private val context: Context) {
             .build()
         http.newCall(req).execute().use { resp ->
             val text = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful && !ignoreErrors) throw RuntimeException("$action failed: HTTP ${resp.code}")
+            if (!resp.isSuccessful && !ignoreErrors) {
+                val code = tag(text, "errorCode")
+                val desc = tag(text, "errorDescription")
+                throw SoapError("HTTP ${resp.code}" +
+                    (if (code.isNotBlank()) ", error $code" else "") +
+                    (if (desc.isNotBlank()) " ($desc)" else ""))
+            }
             return text
         }
     }

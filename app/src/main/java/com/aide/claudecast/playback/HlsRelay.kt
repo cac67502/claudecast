@@ -45,6 +45,8 @@ class HlsRelay(private val context: Context) {
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 
+    var onLog: ((String) -> Unit)? = null
+
     @Volatile private var mediaPlaylistUrl: String = ""
     @Volatile private var contentType: String = "video/mp2t"
 
@@ -100,6 +102,7 @@ class HlsRelay(private val context: Context) {
             s.tcpNoDelay = true
             val reader = BufferedReader(InputStreamReader(s.getInputStream()))
             val requestLine = reader.readLine() ?: return
+            onLog?.invoke("TV requested: ${requestLine.take(60)} from ${s.inetAddress.hostAddress}")
             while (true) { val l = reader.readLine() ?: break; if (l.isEmpty()) break }
             val out = s.getOutputStream()
             val headers = "HTTP/1.1 200 OK\r\n" +
@@ -134,8 +137,10 @@ class HlsRelay(private val context: Context) {
                 try {
                     out.write(bytes)
                     out.flush()
+                    if (sent.isEmpty()) onLog?.invoke("Sending video to the TV")
                 } catch (e: Exception) {
-                    return  // TV disconnected
+                    onLog?.invoke("TV closed the connection")
+                    return
                 }
                 sent += seg.url
                 if (sent.size > 200) sent.remove(sent.first())
