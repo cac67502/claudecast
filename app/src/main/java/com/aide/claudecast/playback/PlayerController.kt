@@ -11,6 +11,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.aide.claudecast.data.Episode
 import com.aide.claudecast.data.Channel
+import com.aide.claudecast.data.Movie
 import com.aide.claudecast.data.Song
 import com.aide.claudecast.data.Station
 import kotlinx.coroutines.CoroutineScope
@@ -23,7 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-enum class MediaKind { None, Podcast, Music, Radio, Tv }
+enum class MediaKind { None, Podcast, Music, Radio, Tv, Movie }
 
 data class PlayerUiState(
     val kind: MediaKind = MediaKind.None,
@@ -67,6 +68,11 @@ class PlayerController(
     val currentStation: StateFlow<Station?> = _currentStation.asStateFlow()
     private val _currentChannel = MutableStateFlow<Channel?>(null)
     val currentChannel: StateFlow<Channel?> = _currentChannel.asStateFlow()
+
+    private val _currentMovie = MutableStateFlow<Movie?>(null)
+    val currentMovie: StateFlow<Movie?> = _currentMovie.asStateFlow()
+    /** Saves a movie's resume point: (id, positionMs, durationMs). */
+    var onMoviePosition: ((String, Long, Long) -> Unit)? = null
 
     /** The underlying player, for attaching a video surface (TV). */
     val videoPlayer: Player? get() = controller
@@ -129,7 +135,7 @@ class PlayerController(
                 st != null -> st.name
                 else -> player.mediaMetadata.artist?.toString() ?: ep?.podcastTitle.orEmpty()
             },
-            artworkUrl = ep?.artworkUrl ?: st?.favicon ?: _currentChannel.value?.logo
+            artworkUrl = ep?.artworkUrl ?: st?.favicon ?: _currentChannel.value?.logo ?: _currentMovie.value?.poster
         )
     }
 
@@ -150,6 +156,7 @@ class PlayerController(
                     if (c.isPlaying && ++ticks >= 10) {
                         ticks = 0
                         _currentEpisode.value?.let { onPersistPosition(it.id, pos) }
+                        _currentMovie.value?.let { onMoviePosition?.invoke(it.id, pos, c.duration) }
                     }
                     // sleep timer: stop at the end of the current episode
                     if (sleepAtEpisodeEnd) {
@@ -179,6 +186,7 @@ class PlayerController(
         queue = episodes
         kind = MediaKind.Podcast
         _currentChannel.value = null
+        _currentMovie.value = null
         _currentStation.value = null
         _currentEpisode.value = episodes[idx]
         val items = episodes.map { ep ->
@@ -210,6 +218,7 @@ class PlayerController(
         queue = emptyList()
         kind = MediaKind.Music
         _currentChannel.value = null
+        _currentMovie.value = null
         _currentStation.value = null
         _currentEpisode.value = null
         val items = songs.map { s ->
@@ -239,6 +248,7 @@ class PlayerController(
         queue = emptyList()
         kind = MediaKind.Radio
         _currentChannel.value = null
+        _currentMovie.value = null
         _currentEpisode.value = null
         _currentStation.value = station
         val item = MediaItem.Builder()
@@ -262,6 +272,36 @@ class PlayerController(
         syncFrom(c)
     }
 
+    /** Play an on-demand movie from [url], starting at [startMs]. */
+    fun playMovie(movie: Movie, url: String, startMs: Long) {
+        val c = controller ?: return
+        queue = emptyList()
+        kind = MediaKind.Movie
+        _currentEpisode.value = null
+        _currentStation.value = null
+        _currentChannel.value = null
+        _currentMovie.value = null
+        _currentMovie.value = movie
+        val item = MediaItem.Builder()
+            .setMediaId("movie:" + movie.id)
+            .setUri(url)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(movie.title)
+                    .setArtist(listOf("Movie", movie.year).filter { it.isNotBlank() }.joinToString(" • "))
+                    .setArtworkUri(Uri.parse(movie.poster))
+                    .build()
+            )
+            .build()
+        c.shuffleModeEnabled = false
+        c.repeatMode = Player.REPEAT_MODE_OFF
+        c.setMediaItem(item, startMs.coerceAtLeast(0L))
+        c.prepare()
+        c.setPlaybackSpeed(1.0f)
+        c.playWhenReady = true
+        syncFrom(c)
+    }
+
     /** Play a live TV channel. */
     fun playChannel(channel: Channel) {
         val c = controller ?: return
@@ -270,6 +310,7 @@ class PlayerController(
         _currentEpisode.value = null
         _currentStation.value = null
         _currentChannel.value = channel
+        _currentMovie.value = null
         val item = MediaItem.Builder()
             .setMediaId("tv:" + channel.id)
             .setUri(channel.url)
@@ -324,6 +365,7 @@ class PlayerController(
         }
         if (c.isPlaying) {
             c.pause()
+            _currentMovie.value?.let { onMoviePosition?.invoke(it.id, c.currentPosition, c.duration) }
             _currentEpisode.value?.let { ep -> scope.launch { onPersistPosition(ep.id, c.currentPosition) } }
         } else {
             c.play()

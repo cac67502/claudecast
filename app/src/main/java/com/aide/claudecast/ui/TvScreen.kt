@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -137,7 +139,33 @@ private val tvCategories = listOf(
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun TvScreen(onOpenPlayer: () -> Unit, vm: TvViewModel = viewModel()) {
+fun TvScreen(onOpenPlayer: () -> Unit) {
+    var tab by rememberSaveable { mutableStateOf(0) }
+    val liveVm: TvViewModel = viewModel()
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = { Text("TV", fontWeight = FontWeight.SemiBold) },
+            actions = {
+                if (tab == 0) IconButton(onClick = { liveVm.load(true) }) { Icon(Icons.Rounded.Refresh, "Refresh list") }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background,
+                titleContentColor = MaterialTheme.colorScheme.onBackground
+            )
+        )
+        androidx.compose.material3.TabRow(
+            selectedTabIndex = tab,
+            containerColor = MaterialTheme.colorScheme.background
+        ) {
+            androidx.compose.material3.Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Live TV") })
+            androidx.compose.material3.Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Movies") })
+        }
+        if (tab == 0) LiveTvTab(onOpenPlayer, liveVm) else MoviesTab(onOpenPlayer)
+    }
+}
+
+@Composable
+private fun LiveTvTab(onOpenPlayer: () -> Unit, vm: TvViewModel) {
     val all by vm.all.collectAsStateWithLifecycle()
     val local by vm.local.collectAsStateWithLifecycle()
     val loading by vm.loading.collectAsStateWithLifecycle()
@@ -162,16 +190,6 @@ fun TvScreen(onOpenPlayer: () -> Unit, vm: TvViewModel = viewModel()) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("TV", fontWeight = FontWeight.SemiBold) },
-            actions = {
-                IconButton(onClick = { vm.load(true) }) { Icon(Icons.Rounded.Refresh, "Refresh list") }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.background,
-                titleContentColor = MaterialTheme.colorScheme.onBackground
-            )
-        )
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
             item {
                 OutlinedTextField(
@@ -374,6 +392,7 @@ fun TvVideo(modifier: Modifier = Modifier, showControls: Boolean = true) {
 @Composable
 fun TvPlayerScreen(onBack: () -> Unit) {
     val channel by ServiceLocator.player.currentChannel.collectAsStateWithLifecycle()
+    val movie by ServiceLocator.player.currentMovie.collectAsStateWithLifecycle()
     val favorites by ServiceLocator.music.tvFavorites.collectAsStateWithLifecycle()
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     val activity = LocalContext.current as? Activity
@@ -412,7 +431,7 @@ fun TvPlayerScreen(onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text(channel?.name ?: "TV", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            title = { Text(movie?.title ?: channel?.name ?: "TV", maxLines = 1, overflow = TextOverflow.Ellipsis) },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
             actions = {
                 channel?.let { ch ->
@@ -430,7 +449,7 @@ fun TvPlayerScreen(onBack: () -> Unit) {
             )
         )
         TvVideo(Modifier.fillMaxWidth().aspectRatio(16f / 9f))
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
             channel?.let { ch ->
                 if (ch.categories.isNotEmpty()) Text(
                     ch.categories.joinToString(", "),
@@ -442,6 +461,17 @@ fun TvPlayerScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            movie?.let { m ->
+                if (m.year.isNotBlank() || m.runtime.isNotBlank()) Text(
+                    listOf(m.year, m.runtime).filter { it.isNotBlank() }.joinToString(" • "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (m.description.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(m.description, style = MaterialTheme.typography.bodyMedium)
+                }
             }
             Spacer(Modifier.height(12.dp))
             Text(

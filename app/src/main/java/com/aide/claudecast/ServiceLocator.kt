@@ -8,6 +8,7 @@ import com.aide.claudecast.data.MusicLibrary
 import com.aide.claudecast.data.MusicStore
 import com.aide.claudecast.data.RadioApi
 import com.aide.claudecast.data.TvApi
+import com.aide.claudecast.data.MovieApi
 import com.aide.claudecast.data.Pc20Fetcher
 import com.aide.claudecast.data.PodcastRepository
 import com.aide.claudecast.data.SettingsStore
@@ -33,6 +34,8 @@ object ServiceLocator {
         private set
     lateinit var tv: TvApi
         private set
+    lateinit var movies: MovieApi
+        private set
     lateinit var recorder: StreamRecorder
         private set
 
@@ -49,6 +52,7 @@ object ServiceLocator {
         library = MusicLibrary(app, music)
         radio = RadioApi()
         tv = TvApi(app)
+        movies = MovieApi(app)
 
         repo = PodcastRepository(ItunesApi(), FeedParser(), store, Pc20Fetcher())
         player = PlayerController(
@@ -56,6 +60,7 @@ object ServiceLocator {
             onPersistPosition = { id, ms -> store.savePosition(id, ms) },
             resumePositionProvider = { id -> store.getPosition(id) }
         )
+        player.onMoviePosition = { id, pos, dur -> movies.saveResume(id, pos, dur) }
         recorder = StreamRecorder(library, music)
         recorder.bind(player)
         initialized = true
