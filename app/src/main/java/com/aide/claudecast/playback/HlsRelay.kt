@@ -152,6 +152,7 @@ class HlsRelay(private val context: Context) {
         var lastReport = System.currentTimeMillis()
         val sc = scope ?: return
         val startAt = resumeSeq
+        val stitcher = if (contentType == "video/mp2t") TsStitcher() else null
         if (startAt != null) onLog?.invoke("TV reconnected, continuing at chunk $startAt")
         while (sc.isActive) {
             val fetched = runCatching { getPlaylist(mediaPlaylistUrl) }.getOrNull()
@@ -164,15 +165,11 @@ class HlsRelay(private val context: Context) {
                 else -> segs.takeLast(3)    // start near the live edge, like a TV channel
             }
             for (seg in todo) {
-                // A feed change partway through this connection: hand off to a fresh one.
-                if (seg.afterBreak && connChunks > 0) {
-                    resumeSeq = seg.seq
-                    onLog?.invoke("Stream change (ad break or program switch) at chunk ${seg.seq}, restarting TV there")
-                    onRestartNeeded?.invoke("stream change")
-                    holdOpen(out)
-                    return
-                }
-                val bytes = runCatching { fetchSegment(seg, keys) }.getOrNull() ?: continue
+                val raw = runCatching { fetchSegment(seg, keys) }.getOrNull() ?: continue
+                // Ads switch to a new timeline; stitch them in so the TV sees one broadcast.
+                val newTimeline = seg.afterBreak && connChunks > 0
+                val bytes = if (stitcher != null) stitcher.process(raw, newTimeline) else raw
+                if (newTimeline) onLog?.invoke("Stitched stream change (ad break or program switch) at chunk ${seg.seq}")
                 try {
                     out.write(bytes)
                     out.flush()
