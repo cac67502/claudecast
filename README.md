@@ -1,77 +1,79 @@
 # ClaudeCast
 
-A native Android podcast player built around **Podcasting 2.0**, themed in Claude's
-clay-and-cream palette. Personal replacement for Podcast Guru on a Pixel 10 Pro XL.
+A private, all-in-one Android media app, themed in Claude's clay-and-cream palette:
+**podcasts, internet radio, music library, free live TV and public-domain movies**, with
+casting to a DLNA TV. Built for a Pixel 10 Pro XL and a Samsung TV.
 
-## No account, no API key
+## Privacy first, no accounts
 
-- **Discovery:** Apple's public **iTunes Search API** — no key, no signup, no auth.
-- **Episodes + all PC2.0 metadata:** parsed **straight from each show's RSS feed**
-  (the `podcast:` namespace), which is the canonical Podcasting 2.0 source anyway.
+No Google services or SDKs, no accounts, no analytics, no trackers, no API keys. Every
+source is open and keyless:
 
-(This replaces the original Podcast Index backend, which blocks signups from free
-email providers.)
+- **Podcast discovery:** Apple's public iTunes Search API.
+- **Episodes and metadata:** parsed straight from each show's RSS feed.
+- **Radio:** Radio Browser (~50k free stations).
+- **Live TV:** community iptv-org lists, filtered to official free services only.
+- **Movies:** free feature films from the Internet Archive.
 
 ## What it does
 
-- **Search & subscribe** to any show in the iTunes directory.
-- **Background playback** via Media3/ExoPlayer with lock-screen & notification controls,
-  audio-focus handling, resume positions, and variable speed.
-- **Podcasting 2.0 features**, parsed from the feed:
-  - **Chapters** — from `<podcast:chapters>` JSON; tap to seek; current chapter highlighted.
-  - **Transcripts** — `<podcast:transcript>` SRT / VTT / JSON / HTML parsed into cues;
-    tap a line to seek; current line highlighted when timecodes exist.
-  - **Persons** — `<podcast:person>` hosts/guests with images and roles.
-  - **Value 4 Value** — `<podcast:value>` recipients and splits displayed (see note).
-  - Soundbites, season/episode, funding links.
+### Podcasts
+- Search and subscribe to any show in the iTunes directory.
+- Background playback (Media3/ExoPlayer) with lock-screen controls, resume positions
+  and variable speed.
+- Podcasting 2.0 from the feed: chapters, transcripts (SRT/VTT/JSON/HTML), persons,
+  Value 4 Value (display only), soundbites, season/episode.
+- **Live shows:** if a podcast has a `podcast:liveItem`, the show page displays a
+  "LIVE NOW" banner with a *Listen live* button, or the scheduled start time.
 
-## Music (v1.2)
+### Radio and music
+- Search free stations by name or genre, with favorites and now-playing song info.
+- Heart a song to save it to a **Heard** list.
+- **Record this song:** one press saves the current song to `Music/ClaudeCast/<station>/`
+  (personal listening, one song per press).
+- Music library of everything on the phone plus recordings, browsed by Songs, Artists,
+  Albums and Playlists, with shuffle and repeat.
 
-- **Radio:** search ~50k free stations by name or genre via Radio Browser (no account,
-  no key). Favorites, now-playing song info, and a heart button that saves the song
-  to a **Heard** list.
-- **Record this song:** tape-deck style. While a station plays, the app keeps the
-  current song in memory; pressing Record saves that one song (MP3 or AAC) to
-  `Music/ClaudeCast/<station>/` when the station's song info changes. One song per
-  press, for personal listening. Toggle "Song recording" off to save data.
-- **Library:** everything on the phone plus recordings, browsed by Songs, Artists,
-  Albums and Playlists, with shuffle and repeat. Nothing leaves the device.
+### Live TV and movies
+- Free live TV channels from official free-TV services.
+- Public-domain feature films from the Internet Archive.
 
-## Volume Guard (v1.1)
+### Casting to a TV (DLNA)
+- Cast video to a DLNA renderer such as a Samsung Tizen TV. No Google Cast SDK.
+- `HlsRelay` follows the HLS stream and serves one continuous MPEG-TS stream to the TV.
+- `TsNormalizer` gives every piece one fixed stream layout and fills audio-less ad
+  pieces with silent audio. `TsStitcher` keeps timestamps continuous across ad breaks.
+  Together they stop the TV dropping the cast at ad breaks.
+- Cast events go to logcat under the tag `ClaudeCastCast`.
 
-Settings ▸ Volume Guard. Taps Undo on Android's "Volume lowered to safer level" alert
+### Volume Guard
+Settings ▸ Volume Guard taps Undo on Android's "Volume lowered to safer level" alert
 and restores the previous media volume. Needs notification access (on sideloaded
 installs: App info ▸ ⋮ ▸ Allow restricted settings first).
 
-## Setup
+## Install
 
-1. **Open in Android Studio** (Hedgehog or newer). `File ▸ Open ▸` the `ClaudeCast`
-   folder, let Gradle sync. The Gradle wrapper JAR isn't bundled — Android Studio
-   regenerates it on first sync (or run `gradle wrapper` if you have Gradle on PATH).
-2. **Build & run** to the Pixel (USB debugging on), or `Build ▸ Build APK(s)`.
-3. That's it — open the app, search, subscribe, play. Nothing to configure.
+Every push to GitHub runs Actions, which builds the app and publishes a release
+`build-N` containing `ClaudeCast.apk`. Download the newest APK and tap it to install.
+Builds are signed with a fixed key, so each one installs over the last.
+
+To build yourself, open the folder in Android Studio (Hedgehog or newer) and let Gradle
+sync, or run `gradle testDebugUnitTest assembleDebug`.
 
 ## Stack
 
 - Kotlin, Jetpack Compose (Material 3), Navigation Compose
-- Media3 1.4.1 (ExoPlayer + MediaSessionService)
-- OkHttp + `XmlPullParser` (RSS / PC2.0 feed parsing) + kotlinx.serialization (iTunes JSON)
-- DataStore (speed/theme) + file-backed JSON (subscriptions / resume positions) — no Room/KSP
+- Media3 (ExoPlayer + MediaSessionService)
+- OkHttp, `XmlPullParser` (feeds), kotlinx.serialization
+- DataStore and file-backed JSON (no Room/KSP)
 - Coil for artwork
 - `compileSdk/targetSdk 35`, `minSdk 26`, Java 17
 
-## Notes / honest caveats
+## Notes
 
-- **Value 4 Value is display-only in v1.** ClaudeCast shows recipients and splits, but
-  actually sending sats (boosts/streaming) needs a connected Lightning wallet
-  (LNURL / NWC / Alby). That's the obvious v2 feature.
-- Discovery is limited to shows listed in Apple's directory; once you have a feed URL,
-  parsing works for any standard RSS feed. A "paste a feed URL directly" box would be a
-  trivial add if you ever want shows outside the directory.
-- iTunes Search is rate-limited (~20 req/min) — fine for personal use.
-- Written carefully but **not compiled in the authoring environment** (no Android SDK
-  there), so the first Gradle sync may surface a minor import/version nit. Everything is
-  structured to compile clean — send me any error text and I'll fix it fast.
+- Value 4 Value is display-only; sending sats would need a Lightning wallet.
+- Podcast discovery is limited to Apple's directory; any RSS feed works once you have
+  its URL.
 
 ## Package
 
