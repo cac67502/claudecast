@@ -113,7 +113,7 @@ class TvApi(private val context: Context) {
 
     private fun allowed(name: String, url: String): Boolean {
         val host = hostRegex.find(url)?.groupValues?.get(1)?.lowercase() ?: return false
-        if (host.first().isDigit()) return false
+        if (ipRegex.matches(host)) return false
         val trusted = allowedHosts.any { host == it || host.endsWith(".$it") }
         if (!trusted) return false
         // Paid cable brands only count when they come from a free service that licenses them.
@@ -128,6 +128,7 @@ class TvApi(private val context: Context) {
         private val tagRegex = Regex("""\[([^\]]+)]""")
         private val resRegex = Regex("""\(\d{3,4}[pi]\)""")
         private val hostRegex = Regex("""^https?://([^/:?#]+)""")
+        private val ipRegex = Regex("""\d{1,3}(\.\d{1,3}){3}""")
 
         private val englishCountries = setOf("us", "ca", "uk", "gb", "au", "nz", "ie", "int")
 
