@@ -62,7 +62,7 @@ class TvApi(private val context: Context) {
                         !resp.isSuccessful -> throw RuntimeException("HTTP ${resp.code}")
                         else -> resp.body?.string().orEmpty()
                     }
-                }.also { runCatching { cache.writeText(it) } }
+                }.also { if (it.isNotBlank()) runCatching { cache.writeText(it) } }
             } catch (e: Exception) {
                 if (cache.exists()) cache.readText() else throw e
             }
