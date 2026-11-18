@@ -182,6 +182,8 @@ class HlsRelay(private val context: Context) {
         val sc = scope ?: return
         val startAt = resumeSeq
         val stitcher = if (contentType == "video/mp2t") TsStitcher() else null
+        val normalizer = if (contentType == "video/mp2t") TsNormalizer() else null
+        var lastNote = ""
         if (startAt != null) onLog?.invoke("TV reconnected, continuing at chunk $startAt")
         while (sc.isActive) {
             val fetched = runCatching { getPlaylist(mediaPlaylistUrl) }.getOrNull()
@@ -200,11 +202,18 @@ class HlsRelay(private val context: Context) {
                 // Describe what this chunk is, so a drop can be matched to what changed.
                 val info = if (stitcher != null) TsInspector.describe(raw) else null
                 val before = lastInfo
-                val bytes = if (stitcher != null) stitcher.process(raw, newTimeline) else raw
+                // One fixed stream layout for the TV (ads often differ from the show), then
+                // stitch the timelines together.
+                val prepared = normalizer?.process(raw) ?: raw
+                val bytes = if (stitcher != null) stitcher.process(prepared, newTimeline) else prepared
+                normalizer?.note?.let { n ->
+                    if (n != lastNote) { lastNote = n; onLog?.invoke("Normalizer: $n (chunk ${seg.seq})") }
+                }
                 if (newTimeline) {
                     onLog?.invoke("Stitched stream change (ad break or program switch) at chunk ${seg.seq}")
                     onLog?.invoke("  was: ${before?.text ?: "?"}")
                     onLog?.invoke("  now: ${info?.text ?: "?"}")
+                    if (stitcher != null) onLog?.invoke("  sent: ${TsInspector.describe(bytes).text}")
                 } else if (info != null && before != null && info.signature != before.signature) {
                     onLog?.invoke("Format changed WITHOUT a break at chunk ${seg.seq}")
                     onLog?.invoke("  was: ${before.text}")
