@@ -80,6 +80,7 @@ class HlsRelay(private val context: Context) {
             else -> throw Unsupported("This channel's chunks aren't in a format the converter can pass through.")
         }
         mediaPlaylistUrl = media
+        lastInfo = null
         resumeSeq = null
         totalChunks = 0
         restartCount = 0
@@ -140,6 +141,34 @@ class HlsRelay(private val context: Context) {
     @Volatile private var resumeSeq: Long? = null
     @Volatile private var totalChunks = 0L
 
+    /** What the previous chunk looked like; survives TV reconnects. */
+    @Volatile private var lastInfo: TsInspector.Info? = null
+
+    // The last few chunks (as fetched, and as sent after stitching), kept for a drop dump.
+    private val recentRaw = java.util.ArrayDeque<ByteArray>()
+    private val recentOut = java.util.ArrayDeque<ByteArray>()
+
+    private fun remember(raw: ByteArray, sent: ByteArray) {
+        synchronized(recentRaw) {
+            recentRaw.addLast(raw); recentOut.addLast(sent)
+            while (recentRaw.size > 4) recentRaw.removeFirst()
+            while (recentOut.size > 4) recentOut.removeFirst()
+        }
+    }
+
+    /** Writes the recent chunks to the app's cache so they can be inspected after a drop. */
+    private fun dumpRecent(seq: Long): String = try {
+        val dir = java.io.File(context.cacheDir, "castdump").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+        synchronized(recentRaw) {
+            java.io.File(dir, "drop-$seq-raw.ts").outputStream().use { o -> recentRaw.forEach { o.write(it) } }
+            java.io.File(dir, "drop-$seq-sent.ts").outputStream().use { o -> recentOut.forEach { o.write(it) } }
+        }
+        "cache/castdump/drop-$seq-*.ts"
+    } catch (e: Exception) {
+        "nowhere (${e.javaClass.simpleName})"
+    }
+
     /**
      * Follows the live playlist and writes each chunk as it appears. When the channel
      * switches feeds (ads), many TVs can't follow the change inside one stream, so this
@@ -168,8 +197,23 @@ class HlsRelay(private val context: Context) {
                 val raw = runCatching { fetchSegment(seg, keys) }.getOrNull() ?: continue
                 // Ads switch to a new timeline; stitch them in so the TV sees one broadcast.
                 val newTimeline = seg.afterBreak && connChunks > 0
+                // Describe what this chunk is, so a drop can be matched to what changed.
+                val info = if (stitcher != null) TsInspector.describe(raw) else null
+                val before = lastInfo
                 val bytes = if (stitcher != null) stitcher.process(raw, newTimeline) else raw
-                if (newTimeline) onLog?.invoke("Stitched stream change (ad break or program switch) at chunk ${seg.seq}")
+                if (newTimeline) {
+                    onLog?.invoke("Stitched stream change (ad break or program switch) at chunk ${seg.seq}")
+                    onLog?.invoke("  was: ${before?.text ?: "?"}")
+                    onLog?.invoke("  now: ${info?.text ?: "?"}")
+                } else if (info != null && before != null && info.signature != before.signature) {
+                    onLog?.invoke("Format changed WITHOUT a break at chunk ${seg.seq}")
+                    onLog?.invoke("  was: ${before.text}")
+                    onLog?.invoke("  now: ${info.text}")
+                } else if (info != null && before == null) {
+                    onLog?.invoke("First chunk: ${info.text}")
+                }
+                if (info != null) lastInfo = info
+                remember(raw, bytes)
                 try {
                     out.write(bytes)
                     out.flush()
@@ -177,7 +221,9 @@ class HlsRelay(private val context: Context) {
                     if (connChunks >= 2) {
                         // A real drop, not the TV's quick format check. Pick up right after.
                         resumeSeq = seg.seq
-                        onLog?.invoke("TV closed the connection at chunk ${seg.seq}, reconnecting")
+                        onLog?.invoke("TV closed the connection at chunk ${seg.seq} (${e.javaClass.simpleName}: ${e.message}), reconnecting")
+                        onLog?.invoke("  chunk being sent: ${info?.text ?: "?"}")
+                        onLog?.invoke("  saved the last chunks to ${dumpRecent(seg.seq)}")
                         onRestartNeeded?.invoke("dropped")
                     }
                     return
