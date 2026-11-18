@@ -126,6 +126,7 @@ class DlnaCaster(private val context: Context) {
     val isCasting: Boolean get() = _state.value.device != null
 
     private fun log(line: String) {
+        android.util.Log.i("ClaudeCastCast", line)
         val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
         _state.value = _state.value.copy(log = (listOf("$ts  $line") + _state.value.log).take(40))
     }
