@@ -11,7 +11,11 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-data class ParsedFeed(val podcast: Podcast, val episodes: List<Episode>)
+data class ParsedFeed(
+    val podcast: Podcast,
+    val episodes: List<Episode>,
+    val liveItems: List<LiveItem> = emptyList()
+)
 
 /**
  * Fetches a podcast RSS feed and parses it, including the Podcasting 2.0 `podcast:`
@@ -51,7 +55,32 @@ class FeedParser {
         var episodeNum: Int? = null
     }
 
-    private fun parseXml(xml: String, feedUrl: String, maxItems: Int): ParsedFeed {
+    private class LiveBuilder {
+        var status = ""
+        var start = 0L
+        var end = 0L
+        var title = ""
+        var description = ""
+        var guid: String? = null
+        var url = ""
+        var type = ""
+        var image: String? = null
+        var link: String? = null
+    }
+
+    /** ISO 8601 with an offset ("...Z", "...-06:00" or "...-0600") to epoch seconds, 0 if unreadable. */
+    internal fun parseIsoDate(raw: String): Long {
+        val s = raw.trim()
+        if (s.isEmpty()) return 0L
+        runCatching { return java.time.OffsetDateTime.parse(s).toEpochSecond() }
+        runCatching {
+            val f = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss[.SSS]xx")
+            return java.time.OffsetDateTime.parse(s, f).toEpochSecond()
+        }
+        return 0L
+    }
+
+    internal fun parseXml(xml: String, feedUrl: String, maxItems: Int = 150): ParsedFeed {
         val factory = XmlPullParserFactory.newInstance()
         factory.isNamespaceAware = false
         val parser = factory.newPullParser()
@@ -72,6 +101,11 @@ class FeedParser {
         var vType = ""; var vMethod = ""; var vSuggested = ""
         var vRecipients: MutableList<ValueRecipient>? = null
         var channelValue: ValueBlock? = null
+
+        // podcast:liveItem being read
+        val liveItems = mutableListOf<LiveItem>()
+        var inLive = false
+        var live: LiveBuilder? = null
 
         var event = parser.eventType
         while (event != XmlPullParser.END_DOCUMENT && episodes.size < maxItems) {
@@ -94,6 +128,28 @@ class FeedParser {
                                     split = parser.attr("split").toIntOrNull() ?: 0
                                 )
                             )
+                        }
+
+                        name.equals("podcast:liveItem", true) -> {
+                            inLive = true
+                            live = LiveBuilder().also {
+                                it.status = parser.attr("status")
+                                it.start = parseIsoDate(parser.attr("start"))
+                                it.end = parseIsoDate(parser.attr("end"))
+                            }
+                        }
+                        inLive -> live?.let { l ->
+                            when {
+                                name.equals("title", true) -> l.title = parser.textSafe()
+                                name.equals("description", true) || name.equals("content:encoded", true) ->
+                                    if (l.description.isEmpty()) l.description = parser.textSafe()
+                                name.equals("guid", true) -> l.guid = parser.textSafe()
+                                name.equals("enclosure", true) -> {
+                                    l.url = parser.attr("url"); l.type = parser.attr("type")
+                                }
+                                name.equals("itunes:image", true) -> l.image = parser.attr("href").ifBlank { null }
+                                name.equals("podcast:contentLink", true) -> l.link = parser.attr("href").ifBlank { null }
+                            }
                         }
 
                         !inItem -> when {
@@ -158,8 +214,30 @@ class FeedParser {
                     when {
                         name.equals("podcast:value", true) -> {
                             val block = ValueBlock(vType, vMethod, vSuggested, vRecipients?.toList() ?: emptyList())
-                            if (inItem) ep?.value = block else channelValue = block
+                            if (inItem) ep?.value = block else if (!inLive) channelValue = block
                             vRecipients = null
+                        }
+                        name.equals("podcast:liveItem", true) -> {
+                            live?.let { l ->
+                                val url = cleanEnclosure(l.url)
+                                if (url.isNotBlank()) {
+                                    liveItems.add(
+                                        LiveItem(
+                                            id = "live:" + (l.guid?.ifBlank { null } ?: url),
+                                            title = l.title.ifBlank { "Live show" },
+                                            status = l.status,
+                                            startSec = l.start,
+                                            endSec = l.end,
+                                            streamUrl = url,
+                                            streamType = l.type,
+                                            artworkUrl = l.image,
+                                            description = l.description,
+                                            linkUrl = l.link
+                                        )
+                                    )
+                                }
+                            }
+                            inLive = false; live = null
                         }
                         name.equals("item", true) -> {
                             ep?.let { e ->
@@ -202,7 +280,7 @@ class FeedParser {
             fundingUrl = fundingUrl,
             fundingMessage = fundingMsg
         )
-        return ParsedFeed(podcast, episodes)
+        return ParsedFeed(podcast, episodes, liveItems.toList())
     }
 
     private fun XmlPullParser.attr(name: String): String =

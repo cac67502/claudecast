@@ -57,6 +57,8 @@ android {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    // Real XmlPullParser for JVM unit tests (the android.jar one is a stub).
+    testImplementation("net.sf.kxml:kxml2:2.3.0")
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
     implementation(composeBom)
 

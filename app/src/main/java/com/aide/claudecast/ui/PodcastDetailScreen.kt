@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -20,6 +21,8 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,6 +45,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aide.claudecast.ServiceLocator
 import com.aide.claudecast.data.Episode
+import com.aide.claudecast.data.LiveItem
 import com.aide.claudecast.data.Podcast
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +55,7 @@ data class DetailUiState(
     val loading: Boolean = true,
     val podcast: Podcast? = null,
     val episodes: List<Episode> = emptyList(),
+    val liveItems: List<LiveItem> = emptyList(),
     val subscribed: Boolean = false,
     val error: String? = null
 )
@@ -64,12 +69,14 @@ class PodcastDetailViewModel : ViewModel() {
         _state.value = DetailUiState(loading = true)
         viewModelScope.launch {
             runCatching {
+                // Always re-read the feed on open: live status changes by the minute.
+                val eps = repo.episodes(feedUrl, forceRefresh = true)
                 val pod = repo.podcast(feedUrl)
-                val eps = repo.episodes(feedUrl)
                 _state.value = DetailUiState(
                     loading = false,
                     podcast = pod,
                     episodes = eps,
+                    liveItems = repo.liveItems(feedUrl),
                     subscribed = repo.isSubscribed(feedUrl)
                 )
             }.onFailure {
@@ -89,6 +96,13 @@ class PodcastDetailViewModel : ViewModel() {
 
     fun playFrom(index: Int) =
         ServiceLocator.player.playQueue(_state.value.episodes, index)
+
+    fun playLive(item: LiveItem) {
+        val pod = _state.value.podcast
+        ServiceLocator.player.play(
+            item.toEpisode(pod?.feedUrl.orEmpty(), pod?.title.orEmpty(), pod?.artworkUrl)
+        )
+    }
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -160,10 +174,48 @@ fun PodcastDetailScreen(
                         }
                     }
                 }
+                val nowSec = System.currentTimeMillis() / 1000
+                items(state.liveItems.filter { it.isLive(nowSec) || it.isUpcoming(nowSec) }, key = { it.id }) { li ->
+                    LiveBanner(li, nowSec, onPlay = { vm.playLive(li); onOpenPlayer() })
+                }
                 itemsIndexed(state.episodes, key = { _, it -> it.id }) { index, ep ->
                     EpisodeRow(ep = ep, onPlay = { vm.playFrom(index); onOpenPlayer() })
                 }
                 item { Spacer(Modifier.height(24.dp)) }
+            }
+        }
+    }
+}
+
+/** A live show: red LIVE badge + Listen live when on the air, or its start time when scheduled. */
+@Composable
+private fun LiveBanner(item: LiveItem, nowSec: Long, onPlay: () -> Unit) {
+    val onAir = item.isLive(nowSec)
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                val label = if (onAir) "● LIVE NOW" else "Live show, starts " +
+                    java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT)
+                        .format(java.util.Date(item.startSec * 1000))
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (onAir) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (onAir) {
+                Spacer(Modifier.width(12.dp))
+                Button(onClick = onPlay) { Text("Listen live") }
             }
         }
     }

@@ -35,6 +35,39 @@ data class Episode(
     val episodeNumber: Int? = null
 )
 
+/** A Podcasting 2.0 `podcast:liveItem`: a live show (status pending / live / ended). */
+data class LiveItem(
+    val id: String,
+    val title: String,
+    val status: String,
+    val startSec: Long = 0L,
+    val endSec: Long = 0L,
+    val streamUrl: String,
+    val streamType: String = "",
+    val artworkUrl: String? = null,
+    val description: String = "",
+    val linkUrl: String? = null
+) {
+    /** On the air now. A stale feed that still says "live" after its end time doesn't count. */
+    fun isLive(nowSec: Long): Boolean =
+        status.equals("live", true) && (endSec == 0L || endSec > nowSec)
+
+    /** Scheduled for later. */
+    fun isUpcoming(nowSec: Long): Boolean =
+        status.equals("pending", true) && startSec > nowSec
+
+    /** Playable like an episode; the "live:" id keeps it out of resume-position storage. */
+    fun toEpisode(feedUrl: String, podcastTitle: String, fallbackArt: String?) = Episode(
+        id = id,
+        feedUrl = feedUrl,
+        title = title,
+        description = description,
+        enclosureUrl = streamUrl,
+        artworkUrl = artworkUrl ?: fallbackArt,
+        podcastTitle = podcastTitle
+    )
+}
+
 @Serializable
 data class TranscriptRef(val url: String, val type: String)
 

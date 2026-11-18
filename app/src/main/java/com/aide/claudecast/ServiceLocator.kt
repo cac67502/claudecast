@@ -61,7 +61,7 @@ object ServiceLocator {
         repo = PodcastRepository(ItunesApi(), FeedParser(), store, Pc20Fetcher())
         player = PlayerController(
             context = app,
-            onPersistPosition = { id, ms -> store.savePosition(id, ms) },
+            onPersistPosition = { id, ms -> if (!id.startsWith("live:")) store.savePosition(id, ms) },
             resumePositionProvider = { id -> store.getPosition(id) }
         )
         player.onMoviePosition = { id, pos, dur -> movies.saveResume(id, pos, dur) }

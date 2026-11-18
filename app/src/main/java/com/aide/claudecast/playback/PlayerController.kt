@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
 import androidx.core.content.ContextCompat
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -204,7 +205,9 @@ class PlayerController(
                 )
                 .build()
         }
-        val resume = resumePositionProvider(episodes[idx].id)
+        // Live shows start at the live edge, never at a saved position.
+        val resume = if (episodes[idx].id.startsWith("live:")) C.TIME_UNSET
+        else resumePositionProvider(episodes[idx].id)
         c.setMediaItems(items, idx, resume)
         c.prepare()
         c.setPlaybackSpeed(defaultSpeed)

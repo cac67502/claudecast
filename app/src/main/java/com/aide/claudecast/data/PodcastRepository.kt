@@ -44,6 +44,9 @@ class PodcastRepository(
     suspend fun episodes(feedUrl: String, forceRefresh: Boolean = false): List<Episode> =
         loadFeed(feedUrl, forceRefresh).episodes
 
+    /** Live shows from the (already loaded) feed; call after [episodes] with forceRefresh. */
+    suspend fun liveItems(feedUrl: String): List<LiveItem> = loadFeed(feedUrl).liveItems
+
     fun isSubscribed(feedUrl: String): Boolean = store.isSubscribed(feedUrl)
     suspend fun subscribe(p: Podcast) = store.subscribe(p)
     suspend fun unsubscribe(feedUrl: String) = store.unsubscribe(feedUrl)
