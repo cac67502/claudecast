@@ -364,6 +364,7 @@ private fun TvEmpty(text: String) {
 fun TvVideo(modifier: Modifier = Modifier, showControls: Boolean = true) {
     val player = ServiceLocator.player.videoPlayer
     val playbackError by ServiceLocator.player.playbackError.collectAsStateWithLifecycle()
+    val playing by ServiceLocator.player.state.collectAsStateWithLifecycle()
     Box(modifier) {
     AndroidView(
         factory = { ctx ->
@@ -384,6 +385,8 @@ fun TvVideo(modifier: Modifier = Modifier, showControls: Boolean = true) {
         update = { view ->
             if (view.player !== player) view.player = player
             view.useController = showControls
+            // Keep the screen (and the TV's remote connection) awake while video plays.
+            view.keepScreenOn = playing.isPlaying
         },
         onRelease = { it.player = null },
         modifier = Modifier.fillMaxSize().background(Color.Black)

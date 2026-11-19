@@ -115,6 +115,11 @@ class PlayerController(
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) { syncFrom(player) }
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            // A live stream that was paused or left too long: rejoin the live edge quietly.
+            if (error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
+                controller?.let { it.seekToDefaultPosition(); it.prepare() }
+                return
+            }
             _playbackError.value = when (error.errorCode) {
                 androidx.media3.common.PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
                 androidx.media3.common.PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
