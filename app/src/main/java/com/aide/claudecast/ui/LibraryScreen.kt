@@ -140,7 +140,8 @@ fun LibraryScreen(
 @Composable
 private fun PodcastGrid(items: List<Podcast>, onOpen: (String) -> Unit) {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
+        // Adaptive: 3 columns on a phone, more on a wide TV so tiles fit above the nav bar.
+        columns = GridCells.Adaptive(minSize = 110.dp),
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
