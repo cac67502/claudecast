@@ -227,7 +227,9 @@ private fun RadioTab(vm: MusicViewModel, onOpenPlayer: () -> Unit) {
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
         item {
+            val typing = rememberTvTyping()
             OutlinedTextField(
+                readOnly = typing.readOnly,
                 value = query,
                 onValueChange = { query = it },
                 placeholder = { Text("Search stations") },
@@ -240,8 +242,9 @@ private fun RadioTab(vm: MusicViewModel, onOpenPlayer: () -> Unit) {
                 keyboardActions = KeyboardActions(onSearch = {
                     genre = ""
                     vm.searchStations(name = query, label = "Results for \"$query\"")
+                    typing.finish()
                 }),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).tvTyping(typing)
             )
         }
         item {
@@ -450,12 +453,16 @@ private fun SongsTab(vm: MusicViewModel, onOpenPlayer: () -> Unit) {
     SongList(
         songs = shown, vm = vm, onOpenPlayer = onOpenPlayer,
         header = {
+            val typing = rememberTvTyping()
             OutlinedTextField(
+                readOnly = typing.readOnly,
                 value = filter, onValueChange = { filter = it },
                 placeholder = { Text("Filter songs") },
                 leadingIcon = { Icon(Icons.Rounded.Search, null) },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { typing.finish() }),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).tvTyping(typing)
             )
         },
         emptyText = "No music yet. Record songs from the Radio tab, or copy music files onto your phone."

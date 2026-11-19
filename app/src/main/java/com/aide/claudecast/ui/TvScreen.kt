@@ -192,7 +192,9 @@ private fun LiveTvTab(onOpenPlayer: () -> Unit, vm: TvViewModel) {
     Column(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
             item {
+                val typing = rememberTvTyping()
                 OutlinedTextField(
+                    readOnly = typing.readOnly,
                     value = query,
                     onValueChange = { query = it },
                     placeholder = { Text("Search channels") },
@@ -201,7 +203,9 @@ private fun LiveTvTab(onOpenPlayer: () -> Unit, vm: TvViewModel) {
                         if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Rounded.Clear, "Clear") }
                     },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { typing.finish() }),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).tvTyping(typing)
                 )
             }
             item {

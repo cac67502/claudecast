@@ -91,7 +91,9 @@ fun LibraryScreen(
                 titleContentColor = MaterialTheme.colorScheme.primary
             )
         )
+        val typing = rememberTvTyping()
         OutlinedTextField(
+            readOnly = typing.readOnly,
             value = query,
             onValueChange = {
                 query = it
@@ -107,9 +109,10 @@ fun LibraryScreen(
             singleLine = true,
             keyboardActions = KeyboardActions(onSearch = {
                 if (query.isNotBlank()) { showResults = true; searchVm.search(query.trim()) }
+                typing.finish()
             }),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).tvTyping(typing)
         )
         if (showResults && query.isNotBlank()) {
             SearchResults(searchState, onOpenPodcast)

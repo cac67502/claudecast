@@ -139,7 +139,9 @@ fun MoviesTab(onOpenPlayer: () -> Unit, vm: MoviesViewModel = viewModel()) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
+            val typing = rememberTvTyping()
             OutlinedTextField(
+                readOnly = typing.readOnly,
                 value = query,
                 onValueChange = { query = it },
                 placeholder = { Text("Search movies, actors, directors") },
@@ -151,8 +153,8 @@ fun MoviesTab(onOpenPlayer: () -> Unit, vm: MoviesViewModel = viewModel()) {
                 },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { vm.search(query, genre) }),
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                keyboardActions = KeyboardActions(onSearch = { vm.search(query, genre); typing.finish() }),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp).tvTyping(typing)
             )
         }
         item(span = { GridItemSpan(maxLineSpan) }) {
