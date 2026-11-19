@@ -88,6 +88,14 @@ fun ClaudeCastTheme(
     MaterialTheme(
         colorScheme = if (dark) DarkColors else LightColors,
         typography = ClaudeTypography,
-        content = content
+        content = {
+            // On a TV, show a clear focus ring for remote-control navigation.
+            if (com.aide.claudecast.TvMode.isTv(androidx.compose.ui.platform.LocalContext.current)) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.foundation.LocalIndication provides FocusRingIndication,
+                    content = content
+                )
+            } else content()
+        }
     )
 }
