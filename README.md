@@ -2,7 +2,8 @@
 
 A private, all-in-one Android media app, themed in Claude's clay-and-cream palette:
 **podcasts, internet radio, music library, free live TV and public-domain movies**, with
-casting to a DLNA TV. Built for a Pixel 10 Pro XL and a Samsung TV.
+casting to a DLNA TV, and a TV mode for Fire TV sticks. Built for a Pixel 10 Pro XL,
+a Samsung TV and a Fire TV Stick.
 
 ## Privacy first, no accounts
 
@@ -25,6 +26,10 @@ source is open and keyless:
   Value 4 Value (display only), soundbites, season/episode.
 - **Live shows:** if a podcast has a `podcast:liveItem`, the show page displays a
   "LIVE NOW" banner with a *Listen live* button, or the scheduled start time.
+- **Video podcasts:** episodes whose feed offers video (a video enclosure or a
+  `podcast:alternateEnclosure` video source) get a Video tag and a camera button that
+  plays them in the full-screen video player, on phone and TV. If the device can't
+  decode the video, the player says so instead of showing a black screen.
 
 ### Radio and music
 - Search free stations by name or genre, with favorites and now-playing song info.
@@ -37,6 +42,17 @@ source is open and keyless:
 ### Live TV and movies
 - Free live TV channels from official free-TV services.
 - Public-domain feature films from the Internet Archive.
+
+### Fire TV and Android TV
+- Runs on Fire TV sticks and Android TV devices, with a TV launcher entry, a visible
+  focus ring for remote-control navigation, and channels and video that open full screen
+  (Back leaves the player).
+- Optionally opens by itself when the device boots. Cast buttons and picture-in-picture
+  are hidden on TV.
+- Installed by sideloading over adb (`adb connect <ip>:5555`, then `adb install`).
+- Limits: the app is still touch-first in places, and a device can only play what its
+  hardware decodes (a 3rd-gen Fire TV Stick tops out at 1080p H.264). Fire OS keeps
+  Amazon's launcher as Home, so ClaudeCast can't replace it.
 
 ### Casting to a TV (DLNA)
 - Cast video to a DLNA renderer such as a Samsung Tizen TV. No Google Cast SDK.
