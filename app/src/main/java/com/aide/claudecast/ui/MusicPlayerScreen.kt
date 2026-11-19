@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -88,8 +89,9 @@ fun MusicPlayerScreen(onBack: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(Modifier.height(8.dp))
-            if (isRadio) StationArt(station?.favicon, Modifier.fillMaxWidth(0.72f).aspectRatio(1f), corner = 20)
-            else SongArt(Modifier.fillMaxWidth(0.72f).aspectRatio(1f), corner = 20)
+            // Capped so the art stays a sensible size on a wide TV screen.
+            if (isRadio) StationArt(station?.favicon, Modifier.fillMaxWidth(0.72f).widthIn(max = 280.dp).aspectRatio(1f), corner = 20)
+            else SongArt(Modifier.fillMaxWidth(0.72f).widthIn(max = 280.dp).aspectRatio(1f), corner = 20)
             Spacer(Modifier.height(20.dp))
 
             Text(

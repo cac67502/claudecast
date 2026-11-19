@@ -1,6 +1,7 @@
 package com.aide.claudecast.ui
 
 import android.util.Base64
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -88,8 +89,14 @@ fun ClaudeCastRoot() {
                     NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                         bottomDests.forEach { dest ->
                             val selected = backStack?.destination?.hierarchy?.any { it.route == dest.route } == true
+                            // On a TV the orange marks the item the remote is on, not the open tab.
+                            val tvMode = com.aide.claudecast.TvMode.isTv(androidx.compose.ui.platform.LocalContext.current)
+                            val source = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                            val focused by source.collectIsFocusedAsState()
+                            val lit = if (tvMode) focused else selected
                             NavigationBarItem(
-                                selected = selected,
+                                interactionSource = source,
+                                selected = lit,
                                 onClick = {
                                     nav.navigate(dest.route) {
                                         popUpTo(nav.graph.findStartDestination().id) { saveState = true }
