@@ -89,9 +89,11 @@ fun MusicPlayerScreen(onBack: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(Modifier.height(8.dp))
-            // Capped so the art stays a sensible size on a wide TV screen.
-            if (isRadio) StationArt(station?.favicon, Modifier.fillMaxWidth(0.72f).widthIn(max = 280.dp).aspectRatio(1f), corner = 20)
-            else SongArt(Modifier.fillMaxWidth(0.72f).widthIn(max = 280.dp).aspectRatio(1f), corner = 20)
+            // Capped so the art stays a sensible size on a wide TV screen. widthIn must come
+            // first, or the fixed fillMaxWidth size wins and the cap does nothing.
+            val artCap = if (com.aide.claudecast.TvMode.isTv(androidx.compose.ui.platform.LocalContext.current)) 190.dp else 360.dp
+            if (isRadio) StationArt(station?.favicon, Modifier.widthIn(max = artCap).fillMaxWidth(0.72f).aspectRatio(1f), corner = 20)
+            else SongArt(Modifier.widthIn(max = artCap).fillMaxWidth(0.72f).aspectRatio(1f), corner = 20)
             Spacer(Modifier.height(20.dp))
 
             Text(
