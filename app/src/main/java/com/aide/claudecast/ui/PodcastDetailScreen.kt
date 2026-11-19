@@ -235,8 +235,12 @@ private fun LiveBanner(item: LiveItem, nowSec: Long, onPlay: () -> Unit) {
 
 @Composable
 private fun EpisodeRow(ep: Episode, onPlay: () -> Unit, onWatch: () -> Unit) {
+    // On a TV the row itself isn't selectable; the remote moves between its buttons
+    // (camera, play) instead, so each choice can be reached with left and right.
+    val isTv = com.aide.claudecast.TvMode.isTv(androidx.compose.ui.platform.LocalContext.current)
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onPlay)
+        modifier = Modifier.fillMaxWidth()
+            .then(if (isTv) Modifier else Modifier.clickable(onClick = onPlay))
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top
     ) {
