@@ -363,6 +363,8 @@ private fun TvEmpty(text: String) {
 @Composable
 fun TvVideo(modifier: Modifier = Modifier, showControls: Boolean = true) {
     val player = ServiceLocator.player.videoPlayer
+    val playbackError by ServiceLocator.player.playbackError.collectAsStateWithLifecycle()
+    Box(modifier) {
     AndroidView(
         factory = { ctx ->
             PlayerView(ctx).apply {
@@ -384,8 +386,18 @@ fun TvVideo(modifier: Modifier = Modifier, showControls: Boolean = true) {
             view.useController = showControls
         },
         onRelease = { it.player = null },
-        modifier = modifier.background(Color.Black)
+        modifier = Modifier.fillMaxSize().background(Color.Black)
     )
+    playbackError?.let { msg ->
+        Text(
+            msg,
+            color = Color.White,
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.align(Alignment.Center).padding(24.dp)
+        )
+    }
+    }
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)

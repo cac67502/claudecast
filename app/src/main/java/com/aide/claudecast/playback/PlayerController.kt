@@ -108,9 +108,29 @@ class PlayerController(
         }, ContextCompat.getMainExecutor(appContext))
     }
 
+    /** A plain-language reason when the current item can't play, else null. */
+    private val _playbackError = MutableStateFlow<String?>(null)
+    val playbackError: StateFlow<String?> = _playbackError.asStateFlow()
+
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) { syncFrom(player) }
+        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            _playbackError.value = when (error.errorCode) {
+                androidx.media3.common.PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+                androidx.media3.common.PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+                androidx.media3.common.PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ->
+                    "This device can't play this video. Its picture size or format is more than the hardware can decode."
+                androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+                androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
+                    "Couldn't reach the stream. Check the network and try again."
+                else -> "Couldn't play this (${error.errorCodeName})."
+            }
+        }
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_READY) _playbackError.value = null
+        }
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            _playbackError.value = null
             // Auto-advance: keep currentEpisode in sync as the playlist moves on.
             val id = mediaItem?.mediaId
             queue.firstOrNull { it.id == id }?.let { _currentEpisode.value = it }
