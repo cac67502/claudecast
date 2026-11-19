@@ -394,7 +394,9 @@ fun TvPlayerScreen(onBack: () -> Unit) {
     val channel by ServiceLocator.player.currentChannel.collectAsStateWithLifecycle()
     val movie by ServiceLocator.player.currentMovie.collectAsStateWithLifecycle()
     val favorites by ServiceLocator.music.tvFavorites.collectAsStateWithLifecycle()
-    var fullscreen by rememberSaveable { mutableStateOf(false) }
+    val isTv = com.aide.claudecast.TvMode.isTv(LocalContext.current)
+    // On a TV the picture fills the screen from the start; Back leaves the player.
+    var fullscreen by rememberSaveable { mutableStateOf(isTv) }
     val activity = LocalContext.current as? Activity
 
     DisposableEffect(fullscreen) {
@@ -419,7 +421,7 @@ fun TvPlayerScreen(onBack: () -> Unit) {
     }
 
     if (fullscreen) {
-        androidx.activity.compose.BackHandler { fullscreen = false }
+        androidx.activity.compose.BackHandler { if (isTv) onBack() else fullscreen = false }
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             TvVideo(Modifier.fillMaxSize())
             IconButton(onClick = { fullscreen = false }, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
@@ -441,7 +443,7 @@ fun TvPlayerScreen(onBack: () -> Unit) {
                             tint = if (fav) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                CastButton()
+                if (!isTv) CastButton()
                 IconButton(onClick = { fullscreen = true }) { Icon(Icons.Rounded.Fullscreen, "Full screen") }
             },
             colors = TopAppBarDefaults.topAppBarColors(
