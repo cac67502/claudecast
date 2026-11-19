@@ -45,6 +45,8 @@ import kotlinx.coroutines.launch
 /** Cast icon for player screens. Highlighted while something is on the TV. */
 @Composable
 fun CastButton() {
+    // Casting from a TV to another screen makes no sense, so hide it there.
+    if (com.aide.claudecast.TvMode.isTv(androidx.compose.ui.platform.LocalContext.current)) return
     val cast by ServiceLocator.caster.state.collectAsStateWithLifecycle()
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }) {
