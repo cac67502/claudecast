@@ -147,6 +147,7 @@ fun TvScreen(onOpenPlayer: () -> Unit) {
             title = { Text("TV", fontWeight = FontWeight.SemiBold) },
             actions = {
                 if (tab == 0) IconButton(onClick = { liveVm.load(true) }) { Icon(Icons.Rounded.Refresh, "Refresh list") }
+                BrandMark()
             },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,

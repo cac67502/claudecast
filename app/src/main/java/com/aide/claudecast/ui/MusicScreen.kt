@@ -183,6 +183,7 @@ fun MusicScreen(onOpenPlayer: () -> Unit, vm: MusicViewModel = viewModel()) {
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("Music", fontWeight = FontWeight.SemiBold) },
+            actions = { BrandMark() },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,
                 titleContentColor = MaterialTheme.colorScheme.onBackground

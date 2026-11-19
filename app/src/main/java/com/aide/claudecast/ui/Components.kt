@@ -158,3 +158,15 @@ fun MiniPlayer(
 
 @Composable
 fun ListPadding() = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+
+/** The app name, shown at the right end of each main screen's top bar. */
+@Composable
+fun BrandMark() {
+    Text(
+        "ClaudeCast",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(end = 16.dp)
+    )
+}

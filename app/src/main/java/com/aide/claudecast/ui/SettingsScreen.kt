@@ -64,6 +64,7 @@ fun SettingsScreen(vm: SettingsViewModel = viewModel()) {
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("Settings", fontWeight = FontWeight.SemiBold) },
+            actions = { BrandMark() },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,
                 titleContentColor = MaterialTheme.colorScheme.onBackground

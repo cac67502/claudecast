@@ -86,9 +86,10 @@ fun LibraryScreen(
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("Podcasts", fontWeight = FontWeight.SemiBold) },
+            actions = { BrandMark() },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,
-                titleContentColor = MaterialTheme.colorScheme.primary
+                titleContentColor = MaterialTheme.colorScheme.onBackground
             )
         )
         val typing = rememberTvTyping()
