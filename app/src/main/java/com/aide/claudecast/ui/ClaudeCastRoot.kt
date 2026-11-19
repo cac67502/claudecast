@@ -37,7 +37,6 @@ sealed class Dest(val route: String, val label: String, val icon: ImageVector) {
     data object Library : Dest("library", "Podcasts", Icons.Rounded.LibraryBooks)
     data object Music : Dest("music", "Music", Icons.Rounded.MusicNote)
     data object Tv : Dest("tv", "TV", Icons.Rounded.LiveTv)
-    data object Search : Dest("search", "Search", Icons.Rounded.Search)
     data object Settings : Dest("settings", "Settings", Icons.Rounded.Settings)
 }
 
@@ -62,7 +61,7 @@ fun ClaudeCastRoot() {
 
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
-    val showBars = currentRoute in setOf(Dest.Library.route, Dest.Music.route, Dest.Tv.route, Dest.Search.route, Dest.Settings.route)
+    val showBars = currentRoute in setOf(Dest.Library.route, Dest.Music.route, Dest.Tv.route, Dest.Settings.route)
 
     // Picture-in-picture: show only the video.
     if (PipState.active && isVideo) {
@@ -130,10 +129,7 @@ fun ClaudeCastRoot() {
             modifier = Modifier.fillMaxSize().padding(padding)
         ) {
             composable(Dest.Library.route) {
-                LibraryScreen(onOpenPodcast = openPodcast, onGoToSearch = { nav.navigate(Dest.Search.route) })
-            }
-            composable(Dest.Search.route) {
-                SearchScreen(onOpenPodcast = openPodcast)
+                LibraryScreen(onOpenPodcast = openPodcast)
             }
             composable(Dest.Music.route) {
                 MusicScreen(onOpenPlayer = { nav.navigate("player") })

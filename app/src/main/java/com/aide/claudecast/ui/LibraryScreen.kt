@@ -12,7 +12,17 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.Button
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.rounded.Clear
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.input.ImeAction
+import kotlinx.coroutines.delay
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -54,43 +64,61 @@ class LibraryViewModel : ViewModel() {
 @Composable
 fun LibraryScreen(
     onOpenPodcast: (String) -> Unit,
-    onGoToSearch: () -> Unit,
-    vm: LibraryViewModel = viewModel()
+    vm: LibraryViewModel = viewModel(),
+    searchVm: SearchViewModel = viewModel()
 ) {
     val subs by vm.subscriptions.collectAsStateWithLifecycle()
     val suggestions by vm.suggestions.collectAsStateWithLifecycle()
+    val searchState by searchVm.state.collectAsStateWithLifecycle()
+    var query by rememberSaveable { mutableStateOf("") }
+    var showResults by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(subs.isEmpty()) { if (subs.isEmpty()) vm.loadSuggestions() }
+    // Search as you type, after a short pause.
+    LaunchedEffect(query) {
+        if (query.trim().length >= 3) {
+            delay(600)
+            showResults = true
+            searchVm.search(query.trim())
+        }
+    }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("Podcasts", fontWeight = FontWeight.SemiBold) },
-            actions = {
-                androidx.compose.material3.IconButton(onClick = onGoToSearch) {
-                    androidx.compose.material3.Icon(
-                        Icons.Rounded.Search,
-                        contentDescription = "Search podcasts"
-                    )
-                }
-            },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,
                 titleContentColor = MaterialTheme.colorScheme.primary
             )
         )
-        if (subs.isEmpty()) {
-            if (suggestions.isEmpty()) {
-                Column(Modifier.fillMaxSize()) {
-                    EmptyState(
-                        title = "Your library is empty",
-                        subtitle = "Search to find and subscribe to any podcast. No account needed.",
-                        modifier = Modifier.weight(1f)
-                    )
-                    Button(
-                        onClick = onGoToSearch,
-                        modifier = Modifier.fillMaxWidth().padding(16.dp)
-                    ) { Text("Find podcasts") }
+        OutlinedTextField(
+            value = query,
+            onValueChange = {
+                query = it
+                if (it.isBlank()) showResults = false
+            },
+            placeholder = { Text("Search podcasts") },
+            leadingIcon = { Icon(Icons.Rounded.Search, null) },
+            trailingIcon = {
+                if (query.isNotEmpty()) IconButton(onClick = { query = ""; showResults = false }) {
+                    Icon(Icons.Rounded.Clear, "Clear")
                 }
+            },
+            singleLine = true,
+            keyboardActions = KeyboardActions(onSearch = {
+                if (query.isNotBlank()) { showResults = true; searchVm.search(query.trim()) }
+            }),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        if (showResults && query.isNotBlank()) {
+            SearchResults(searchState, onOpenPodcast)
+        } else if (subs.isEmpty()) {
+            if (suggestions.isEmpty()) {
+                EmptyState(
+                    title = "Your library is empty",
+                    subtitle = "Search above to find and subscribe to any podcast. No account needed."
+                )
             } else {
                 Text(
                     "Popular now",

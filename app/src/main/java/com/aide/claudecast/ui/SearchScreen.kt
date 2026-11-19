@@ -85,6 +85,14 @@ fun SearchScreen(
             )
         )
 
+        SearchResults(state, onOpenPodcast)
+    }
+}
+
+/** Search results (or the loading, error and empty states), shared by the Podcasts screen. */
+@Composable
+fun SearchResults(state: SearchUiState, onOpenPodcast: (String) -> Unit) {
+    Column(Modifier.fillMaxSize()) {
         when {
             state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
             state.error != null -> EmptyState(title = "Hmm", subtitle = state.error!!)
