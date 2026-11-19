@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -62,7 +64,15 @@ fun LibraryScreen(
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text("ClaudeCast", fontWeight = FontWeight.SemiBold) },
+            title = { Text("Podcasts", fontWeight = FontWeight.SemiBold) },
+            actions = {
+                androidx.compose.material3.IconButton(onClick = onGoToSearch) {
+                    androidx.compose.material3.Icon(
+                        Icons.Rounded.Search,
+                        contentDescription = "Search podcasts"
+                    )
+                }
+            },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,
                 titleContentColor = MaterialTheme.colorScheme.primary

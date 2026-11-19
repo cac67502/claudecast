@@ -34,14 +34,15 @@ import com.aide.claudecast.ServiceLocator
 import com.aide.claudecast.playback.MediaKind
 
 sealed class Dest(val route: String, val label: String, val icon: ImageVector) {
-    data object Library : Dest("library", "Library", Icons.Rounded.LibraryBooks)
+    data object Library : Dest("library", "Podcasts", Icons.Rounded.LibraryBooks)
     data object Music : Dest("music", "Music", Icons.Rounded.MusicNote)
     data object Tv : Dest("tv", "TV", Icons.Rounded.LiveTv)
     data object Search : Dest("search", "Search", Icons.Rounded.Search)
     data object Settings : Dest("settings", "Settings", Icons.Rounded.Settings)
 }
 
-private val bottomDests = listOf(Dest.Library, Dest.Music, Dest.Tv, Dest.Search, Dest.Settings)
+// Search lives inside the Podcasts screen now, so it isn't a tab of its own.
+private val bottomDests = listOf(Dest.Library, Dest.Music, Dest.Tv, Dest.Settings)
 
 private fun encodeArg(s: String): String =
     Base64.encodeToString(s.toByteArray(), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
