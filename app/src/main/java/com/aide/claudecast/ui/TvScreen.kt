@@ -424,7 +424,8 @@ fun TvPlayerScreen(onBack: () -> Unit) {
         androidx.activity.compose.BackHandler { if (isTv) onBack() else fullscreen = false }
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             TvVideo(Modifier.fillMaxSize())
-            IconButton(onClick = { fullscreen = false }, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
+            // On a TV, Back on the remote leaves the player, so no on-screen button is needed.
+            if (!isTv) IconButton(onClick = { fullscreen = false }, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
                 Icon(Icons.Rounded.FullscreenExit, "Exit full screen", tint = Color.White)
             }
         }
