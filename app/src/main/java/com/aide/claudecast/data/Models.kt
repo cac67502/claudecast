@@ -32,7 +32,9 @@ data class Episode(
     val soundbites: List<Soundbite> = emptyList(),
     val value: ValueBlock? = null,
     val season: Int? = null,
-    val episodeNumber: Int? = null
+    val episodeNumber: Int? = null,
+    /** A video version of the episode, when the feed offers one. */
+    val videoUrl: String? = null
 )
 
 /** A Podcasting 2.0 `podcast:liveItem`: a live show (status pending / live / ended). */

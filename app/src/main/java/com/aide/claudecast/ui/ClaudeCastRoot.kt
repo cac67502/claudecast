@@ -55,13 +55,16 @@ fun ClaudeCastRoot() {
     val nav = rememberNavController()
     val player = ServiceLocator.player
     val playerState by player.state.collectAsStateWithLifecycle()
+    val videoMode by player.videoMode.collectAsStateWithLifecycle()
+    val isVideo = playerState.kind == MediaKind.Tv || playerState.kind == MediaKind.Movie ||
+        (playerState.kind == MediaKind.Podcast && videoMode)
 
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     val showBars = currentRoute in setOf(Dest.Library.route, Dest.Music.route, Dest.Tv.route, Dest.Search.route, Dest.Settings.route)
 
     // Picture-in-picture: show only the video.
-    if (PipState.active && (playerState.kind == MediaKind.Tv || playerState.kind == MediaKind.Movie)) {
+    if (PipState.active && isVideo) {
         TvVideo(Modifier.fillMaxSize(), showControls = false)
         return
     }
@@ -147,7 +150,7 @@ fun ClaudeCastRoot() {
                 )
             }
             composable("player") {
-                if (playerState.kind == MediaKind.Tv || playerState.kind == MediaKind.Movie)
+                if (isVideo)
                     TvPlayerScreen(onBack = { nav.popBackStack() })
                 else if (playerState.kind == MediaKind.Music || playerState.kind == MediaKind.Radio)
                     MusicPlayerScreen(onBack = { nav.popBackStack() })

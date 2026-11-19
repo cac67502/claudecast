@@ -52,7 +52,9 @@ class MainActivity : ComponentActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         val s = ServiceLocator.player.state.value
-        if (!TvMode.isTv(this) && (s.kind == MediaKind.Tv || s.kind == MediaKind.Movie) && s.isPlaying) {
+        val video = s.kind == MediaKind.Tv || s.kind == MediaKind.Movie ||
+            (s.kind == MediaKind.Podcast && ServiceLocator.player.videoMode.value)
+        if (!TvMode.isTv(this) && video && s.isPlaying) {
             runCatching {
                 enterPictureInPictureMode(
                     PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()

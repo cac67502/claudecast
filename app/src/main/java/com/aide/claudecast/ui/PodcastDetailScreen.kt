@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -96,6 +97,13 @@ class PodcastDetailViewModel : ViewModel() {
 
     fun playFrom(index: Int) =
         ServiceLocator.player.playQueue(_state.value.episodes, index)
+
+    /** Watch an episode as video (only offered when the feed has a video version). */
+    fun watchVideo(index: Int) {
+        val ep = _state.value.episodes.getOrNull(index) ?: return
+        if (ep.videoUrl == null) return
+        ServiceLocator.player.playQueue(listOf(ep), 0, video = true)
+    }
 
     fun playLive(item: LiveItem) {
         val pod = _state.value.podcast
@@ -179,7 +187,11 @@ fun PodcastDetailScreen(
                     LiveBanner(li, nowSec, onPlay = { vm.playLive(li); onOpenPlayer() })
                 }
                 itemsIndexed(state.episodes, key = { _, it -> it.id }) { index, ep ->
-                    EpisodeRow(ep = ep, onPlay = { vm.playFrom(index); onOpenPlayer() })
+                    EpisodeRow(
+                        ep = ep,
+                        onPlay = { vm.playFrom(index); onOpenPlayer() },
+                        onWatch = { vm.watchVideo(index); onOpenPlayer() }
+                    )
                 }
                 item { Spacer(Modifier.height(24.dp)) }
             }
@@ -222,7 +234,7 @@ private fun LiveBanner(item: LiveItem, nowSec: Long, onPlay: () -> Unit) {
 }
 
 @Composable
-private fun EpisodeRow(ep: Episode, onPlay: () -> Unit) {
+private fun EpisodeRow(ep: Episode, onPlay: () -> Unit, onWatch: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onPlay)
             .padding(horizontal = 16.dp, vertical = 10.dp),
@@ -246,6 +258,16 @@ private fun EpisodeRow(ep: Episode, onPlay: () -> Unit) {
                 if (ep.chaptersUrl != null) Pc20Tag("Chapters")
                 if (ep.transcripts.isNotEmpty()) Pc20Tag("Transcript")
                 if (ep.value != null) Pc20Tag("V4V")
+                if (ep.videoUrl != null) Pc20Tag("Video")
+            }
+        }
+        if (ep.videoUrl != null) {
+            IconButton(onClick = onWatch) {
+                Icon(
+                    Icons.Rounded.Videocam, contentDescription = "Watch video",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(30.dp)
+                )
             }
         }
         IconButton(onClick = onPlay) {

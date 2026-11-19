@@ -44,6 +44,9 @@ class FeedParser {
         var pubDate = ""
         var guid: String? = null
         var enclosureUrl = ""
+        var enclosureType = ""
+        var altType = ""            // type of the podcast:alternateEnclosure being read
+        var videoUrl: String? = null
         var durationRaw: String? = null
         var image: String? = null
         var chaptersUrl: String? = null
@@ -178,7 +181,14 @@ class FeedParser {
                                     if (e.description.isEmpty()) e.description = parser.textSafe()
                                 name.equals("pubDate", true) -> e.pubDate = parser.textSafe()
                                 name.equals("guid", true) -> e.guid = parser.textSafe()
-                                name.equals("enclosure", true) -> e.enclosureUrl = parser.attr("url")
+                                name.equals("enclosure", true) -> {
+                                    e.enclosureUrl = parser.attr("url"); e.enclosureType = parser.attr("type")
+                                }
+                                name.equals("podcast:alternateEnclosure", true) -> e.altType = parser.attr("type")
+                                name.equals("podcast:source", true) -> {
+                                    val u = parser.attr("uri")
+                                    if (e.videoUrl == null && isVideoType(e.altType) && u.startsWith("http")) e.videoUrl = u
+                                }
                                 name.equals("itunes:duration", true) -> e.durationRaw = parser.textSafe()
                                 name.equals("itunes:image", true) -> e.image = parser.attr("href").ifBlank { null }
                                 name.equals("itunes:season", true) || name.equals("podcast:season", true) ->
@@ -217,6 +227,7 @@ class FeedParser {
                             if (inItem) ep?.value = block else if (!inLive) channelValue = block
                             vRecipients = null
                         }
+                        name.equals("podcast:alternateEnclosure", true) -> ep?.altType = ""
                         name.equals("podcast:liveItem", true) -> {
                             live?.let { l ->
                                 val url = cleanEnclosure(l.url)
@@ -259,7 +270,9 @@ class FeedParser {
                                         soundbites = e.soundbites.toList(),
                                         value = e.value ?: channelValue,
                                         season = e.season,
-                                        episodeNumber = e.episodeNum
+                                        episodeNumber = e.episodeNum,
+                                        videoUrl = e.videoUrl
+                                            ?: if (isVideoType(e.enclosureType)) cleanEnclosure(e.enclosureUrl).ifBlank { null } else null
                                     )
                                 )
                             }
@@ -330,6 +343,9 @@ class FeedParser {
         Regex("^https?://arttrk\\.com/p/[^/]+/", RegexOption.IGNORE_CASE),
         Regex("^https?://pdrl\\.fm/[^/]+/", RegexOption.IGNORE_CASE)
     )
+
+    private fun isVideoType(type: String): Boolean =
+        type.startsWith("video/", ignoreCase = true) || type.contains("mpegurl", ignoreCase = true)
 
     private fun cleanEnclosure(url: String): String {
         var u = url.trim()

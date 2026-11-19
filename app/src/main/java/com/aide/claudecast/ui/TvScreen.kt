@@ -393,6 +393,7 @@ fun TvVideo(modifier: Modifier = Modifier, showControls: Boolean = true) {
 fun TvPlayerScreen(onBack: () -> Unit) {
     val channel by ServiceLocator.player.currentChannel.collectAsStateWithLifecycle()
     val movie by ServiceLocator.player.currentMovie.collectAsStateWithLifecycle()
+    val episode by ServiceLocator.player.currentEpisode.collectAsStateWithLifecycle()
     val favorites by ServiceLocator.music.tvFavorites.collectAsStateWithLifecycle()
     val isTv = com.aide.claudecast.TvMode.isTv(LocalContext.current)
     // On a TV the picture fills the screen from the start; Back leaves the player.
@@ -434,7 +435,7 @@ fun TvPlayerScreen(onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text(movie?.title ?: channel?.name ?: "TV", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            title = { Text(movie?.title ?: channel?.name ?: episode?.title ?: "TV", maxLines = 1, overflow = TextOverflow.Ellipsis) },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
             actions = {
                 channel?.let { ch ->

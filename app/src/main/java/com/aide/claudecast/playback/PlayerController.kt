@@ -64,6 +64,10 @@ class PlayerController(
 
     private var queue: List<Episode> = emptyList()
 
+    /** True while a podcast episode is being watched as video rather than listened to. */
+    private val _videoMode = MutableStateFlow(false)
+    val videoMode: StateFlow<Boolean> = _videoMode.asStateFlow()
+
     private var kind = MediaKind.None
     private val _currentStation = MutableStateFlow<Station?>(null)
     val currentStation: StateFlow<Station?> = _currentStation.asStateFlow()
@@ -182,12 +186,13 @@ class PlayerController(
      * Load [episodes] as a playlist starting at [startIndex] and play. ExoPlayer then
      * auto-advances to the next episode in the list when each one finishes.
      */
-    fun playQueue(episodes: List<Episode>, startIndex: Int) {
+    fun playQueue(episodes: List<Episode>, startIndex: Int, video: Boolean = false) {
         val c = controller ?: return
         if (episodes.isEmpty()) return
         val idx = startIndex.coerceIn(0, episodes.lastIndex)
         queue = episodes
         kind = MediaKind.Podcast
+        _videoMode.value = video
         _currentChannel.value = null
         _currentMovie.value = null
         _currentStation.value = null
@@ -195,7 +200,7 @@ class PlayerController(
         val items = episodes.map { ep ->
             MediaItem.Builder()
                 .setMediaId(ep.id)
-                .setUri(ep.enclosureUrl)
+                .setUri(if (video) ep.videoUrl ?: ep.enclosureUrl else ep.enclosureUrl)
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(ep.title)
@@ -353,10 +358,11 @@ class PlayerController(
             MediaKind.Podcast -> {
                 val id = c.currentMediaItem?.mediaId
                 val ep = queue.firstOrNull { it.id == id } ?: _currentEpisode.value ?: return null
-                val u = ep.enclosureUrl
+                val u = if (_videoMode.value) ep.videoUrl ?: ep.enclosureUrl else ep.enclosureUrl
                 if (!u.startsWith("http")) return null
                 val lower = u.lowercase().substringBefore('?')
                 val (mime, video) = when {
+                    isHls(u) && _videoMode.value -> "application/vnd.apple.mpegurl" to true
                     lower.endsWith(".mp4") || lower.endsWith(".m4v") -> "video/mp4" to true
                     lower.endsWith(".m4a") || lower.endsWith(".aac") -> "audio/mp4" to false
                     else -> "audio/mpeg" to false
