@@ -19,7 +19,8 @@ source is open and keyless:
 ## What it does
 
 ### Podcasts
-- Search and subscribe to any show in the iTunes directory.
+- Search and subscribe to any show in the iTunes directory. The Podcasts tab has a search
+  box at the top; results replace your subscriptions until you clear it.
 - Background playback (Media3/ExoPlayer) with lock-screen controls, resume positions
   and variable speed.
 - Podcasting 2.0 from the feed: chapters, transcripts (SRT/VTT/JSON/HTML), persons,
@@ -46,7 +47,10 @@ source is open and keyless:
 ### Fire TV and Android TV
 - Runs on Fire TV sticks and Android TV devices, with a TV launcher entry, a visible
   focus ring for remote-control navigation, and channels and video that open full screen
-  (Back leaves the player).
+  (Back leaves the player). Search boxes open the on-screen keyboard only when OK is
+  pressed, so Up and Down can move past them, and the podcast grid adapts to the wide screen.
+- Live channels that fall too far behind rejoin the live edge on their own, and the screen
+  stays awake while video plays.
 - Optionally opens by itself when the device boots. Cast buttons and picture-in-picture
   are hidden on TV.
 - Installed by sideloading over adb (`adb connect <ip>:5555`, then `adb install`).
