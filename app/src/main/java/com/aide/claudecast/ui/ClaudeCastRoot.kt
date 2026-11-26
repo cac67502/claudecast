@@ -63,6 +63,15 @@ fun ClaudeCastRoot() {
     val currentRoute = backStack?.destination?.route
     val showBars = currentRoute in setOf(Dest.Library.route, Dest.Music.route, Dest.Tv.route, Dest.Settings.route)
 
+    // On a TV, anything playing (radio and podcasts too) must keep the screen on:
+    // if the stick sleeps, the TV loses the picture and shows a "check device power" error.
+    val rootView = androidx.compose.ui.platform.LocalView.current
+    val keepAwake = com.aide.claudecast.TvMode.isTv(rootView.context) && playerState.isPlaying
+    androidx.compose.runtime.DisposableEffect(rootView, keepAwake) {
+        rootView.keepScreenOn = keepAwake
+        onDispose { rootView.keepScreenOn = false }
+    }
+
     // Picture-in-picture: show only the video.
     if (PipState.active && isVideo) {
         TvVideo(Modifier.fillMaxSize(), showControls = false)
